@@ -27,6 +27,20 @@ function AppContent() {
   const { currentPage, navigateTo } = useRouter('inicio');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
 
+  // Leer property id desde hash inicial o cuando cambia hash (useRouter ya actualiza page)
+  useEffect(() => {
+    const syncFromHash = () => {
+      const hash = window.location.hash.replace(/^#/, '');
+      if (hash.startsWith('/propiedad/')) {
+        const id = hash.split('/')[2];
+        if (id) setSelectedPropertyId(id);
+      }
+    };
+    syncFromHash();
+    window.addEventListener('hashchange', syncFromHash);
+    return () => window.removeEventListener('hashchange', syncFromHash);
+  }, []);
+
   useEffect(() => {
     // Smooth scrolling para toda la página
     document.documentElement.style.scrollBehavior = 'smooth';
@@ -46,7 +60,7 @@ function AppContent() {
                 <Hero onNavigateToProperties={() => navigateTo('propiedades')} />
               </div>
               <div id="propiedades">
-                <FeaturedProperties onSelectProperty={(id) => { setSelectedPropertyId(id); navigateTo('propiedad'); }} />
+                <FeaturedProperties onSelectProperty={(id) => { setSelectedPropertyId(id); window.location.hash = `/propiedad/${id}`; navigateTo('propiedad'); }} />
               </div>
               <div id="servicios">
                 <Services />
@@ -65,7 +79,7 @@ function AppContent() {
         return (
           <PageTransition pageKey="propiedades">
             <main className="pt-16">
-              <PropertiesPage onSelectProperty={(id) => { setSelectedPropertyId(id); navigateTo('propiedad'); }} />
+              <PropertiesPage onSelectProperty={(id) => { setSelectedPropertyId(id); window.location.hash = `/propiedad/${id}`; navigateTo('propiedad'); }} />
             </main>
             <Footer />
           </PageTransition>
@@ -76,7 +90,7 @@ function AppContent() {
             <main className="pt-16">
               <PropertyDetailPage 
                 propertyId={selectedPropertyId} 
-                onBack={() => navigateTo('propiedades')} 
+                onBack={() => { navigateTo('propiedades'); }} 
                 onNavigateToContact={() => navigateTo('contacto')} 
               />
             </main>
