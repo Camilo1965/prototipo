@@ -1,0 +1,41 @@
+// CLEAN RESTORED STABLE VERSION
+import { useState, useEffect } from 'react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
+import { NewPropertyModal } from './NewPropertyModal';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Badge } from '../ui/badge';
+import { Card, CardContent } from '../ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Slider } from '../ui/slider';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Checkbox } from '../ui/checkbox';
+import { Search, Filter, Grid, List, MapPin, Bed, Bath, Square, Euro, Eye, Trash2, Star, Home, Building, MoreHorizontal, SortAsc, SortDesc, X } from 'lucide-react';
+import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { toast } from 'sonner';
+
+interface Property {
+  id: string;
+  title: string;
+  price: string; // numeric string
+  location: string;
+  type: string;
+  bedrooms: number;
+  bathrooms: number;
+  area: number; // m2
+  image: string;
+  description: string;
+  status: string; // Activa, Vendida, Pendiente, Inactiva
+  featured: boolean;
+  dateAdded: string; // ISO date
+  views: number;
+  agent: string;
+  amenities: string[];
+  condition: string;
+  energyRating: string;
+}
+
+interface AllPropertiesModalProps {
+  isOpen: boolean;
+  onClose: (open: boolean) => void;
+}

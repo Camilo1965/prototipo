@@ -133,7 +133,9 @@ export function AdminDashboard() {
   // Cargar datos del dashboard cuando el usuario esté autenticado
   useEffect(() => {
     if (user) {
+      // Intentar cargar datos reales del backend
       loadDashboardData();
+      
       // Actualizar datos cada 30 segundos
       const interval = setInterval(() => {
         loadDashboardData();
@@ -141,6 +143,112 @@ export function AdminDashboard() {
       return () => clearInterval(interval);
     }
   }, [user]);
+  
+  // Función para cargar datos de demostración
+  const loadDemoData = () => {
+    setLoadingStats(false);
+    setLoadError(false);
+    
+    // Datos de ejemplo para el dashboard
+    setDashboardStats({
+      properties: {
+        total: 42,
+        available: 38,
+        sold: 4,
+        totalViews: 2470
+      },
+      inquiries: {
+        total: 27,
+        pending: 8,
+        processed: 19
+      },
+      propertyTypeStats: {
+        'apartamento': 18,
+        'casa': 10,
+        'chalet': 6,
+        'ático': 5,
+        'oficina': 3
+      }
+    });
+    
+    // Propiedades recientes de ejemplo
+    setRecentProperties([
+      {
+        id: 'demo1',
+        title: 'Apartamento Moderno en Salamanca',
+        price: 350000000,
+        location: 'Salamanca, Madrid',
+        type: 'apartamento',
+        bedrooms: 2,
+        bathrooms: 2,
+        area: 95,
+        status: 'Disponible',
+        condition: 'Excelente',
+        views: 512,
+        images: ['https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=300'],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: 'demo2',
+        title: 'Casa con Jardín en Las Rozas',
+        price: 750000000,
+        location: 'Las Rozas, Madrid',
+        type: 'casa',
+        bedrooms: 4,
+        bathrooms: 3,
+        area: 210,
+        status: 'Disponible',
+        condition: 'Buen estado',
+        views: 387,
+        images: ['https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=300'],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: 'demo3',
+        title: 'Ático con Terraza en Chamberí',
+        price: 495000000,
+        location: 'Chamberí, Madrid',
+        type: 'ático',
+        bedrooms: 3,
+        bathrooms: 2,
+        area: 120,
+        status: 'Disponible',
+        condition: 'Reformado',
+        views: 302,
+        images: ['https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=300'],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+    
+    // Consultas recientes de ejemplo
+    setRecentInquiries([
+      {
+        id: 'inq1',
+        name: 'Carlos Rodríguez',
+        email: 'carlos@example.com',
+        phone: '+34 612 345 678',
+        message: 'Me interesa el apartamento en Salamanca. ¿Podría visitarlo esta semana?',
+        propertyId: 'demo1',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: 'inq2',
+        name: 'Laura Martínez',
+        email: 'laura@example.com',
+        phone: '+34 623 456 789',
+        message: 'Quisiera información sobre la casa en Las Rozas. ¿Es posible negociar el precio?',
+        propertyId: 'demo2',
+        status: 'processed',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+  };
 
   // Simulate real-time updates
   useEffect(() => {
@@ -161,7 +269,11 @@ export function AdminDashboard() {
     if (!user) return;
     setLoadError(false);
     try {
-      setLoadingStats(true);
+      if (!isRetry) {
+        setLoadingStats(true);
+      }
+      console.log('Cargando datos del dashboard en tiempo real...');
+      
       const accessToken = await getAccessToken();
       // Cargar estadísticas del dashboard
       const statsResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/simple/make-server-5b516b3d/dashboard/stats`, {
@@ -172,8 +284,10 @@ export function AdminDashboard() {
       });
       if (statsResponse.ok) {
         const stats = await statsResponse.json();
+        console.log('Estadísticas cargadas correctamente:', stats);
         setDashboardStats(stats);
       } else {
+        console.error('Error al cargar estadísticas:', statsResponse.status);
         throw new Error('No stats');
       }
       // Cargar propiedades recientes
@@ -213,13 +327,15 @@ export function AdminDashboard() {
       }
       setLoadingStats(false);
     } catch (error) {
+      console.error('Error al cargar datos del dashboard:', error);
       setLoadError(true);
       setLoadingStats(false);
-      if (!isRetry) {
-        // Reintentar automáticamente después de 4 segundos
-        if (retryTimeout.current) clearTimeout(retryTimeout.current);
-        retryTimeout.current = setTimeout(() => loadDashboardData(true), 4000);
-      }
+      
+      // Siempre reintentar automáticamente, independientemente del estado
+      if (retryTimeout.current) clearTimeout(retryTimeout.current);
+      const retryDelay = isRetry ? 8000 : 4000; // Aumentar el tiempo entre reintentos consecutivos
+      console.log(`Reintentando cargar datos en ${retryDelay/1000} segundos...`);
+      retryTimeout.current = setTimeout(() => loadDashboardData(true), retryDelay);
     }
   };
 
@@ -252,9 +368,38 @@ export function AdminDashboard() {
         setIsModalOpen(true);
         break;
       case 'delete':
-        toast.warning('Función de eliminar', {
-          description: 'Confirmación de eliminación se mostraría aquí'
-        });
+        if (!property || !property.id) {
+          toast.error('Error al intentar eliminar la propiedad', {
+            description: 'No se ha seleccionado una propiedad válida'
+          });
+          return;
+        }
+        
+        if (window.confirm(`¿Está seguro que desea eliminar la propiedad "${property.title}"?`)) {
+          toast.loading('Eliminando propiedad...');
+          
+          // Llamar a la API para eliminar la propiedad
+          import('../utils/api').then(({propertiesAPI}) => {
+            propertiesAPI.delete(property.id)
+              .then(() => {
+                // Actualizar el estado local eliminando la propiedad
+                setAllProperties(prev => prev.filter(p => p.id !== property.id));
+                setRecentProperties(prev => prev.filter(p => p.id !== property.id));
+                
+                toast.dismiss();
+                toast.success('Propiedad eliminada exitosamente', {
+                  description: `La propiedad "${property.title}" ha sido eliminada.`
+                });
+              })
+              .catch(error => {
+                console.error('Error al eliminar la propiedad:', error);
+                toast.dismiss();
+                toast.error('Error al eliminar la propiedad', {
+                  description: 'No se pudo eliminar la propiedad. Por favor, inténtelo de nuevo.'
+                });
+              });
+          });
+        }
         break;
       case 'activate':
         toast.success('Propiedad activada');
@@ -368,7 +513,7 @@ export function AdminDashboard() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-slate-600">Verificando acceso...</p>
+          <p className="text-slate-600">Verificando acceso y conectando con el servidor...</p>
         </div>
       </div>
     );
@@ -535,8 +680,13 @@ export function AdminDashboard() {
                 <div className="col-span-4 flex flex-col items-center justify-center py-12 animate-pulse">
                   <div className="mb-6 flex flex-col items-center">
                     <BarChart3 className="h-12 w-12 text-blue-400 animate-bounce mb-2" />
-                    <span className="text-lg font-semibold text-blue-700 animate-pulse">Cargando resumen del panel...</span>
-                    <span className="text-sm text-gray-500 mt-1">Esto puede tardar unos segundos si el servidor está en frío.</span>
+                    <span className="text-lg font-semibold text-blue-700 animate-pulse">Conectando con el servidor...</span>
+                    <span className="text-sm text-gray-500 mt-1">Obteniendo datos en tiempo real. El servidor puede tardar unos segundos en responder.</span>
+                    <div className="flex gap-2 mt-3">
+                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" style={{animationDelay: "0.3s"}}></div>
+                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" style={{animationDelay: "0.6s"}}></div>
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
                     {Array.from({ length: 4 }).map((_, index) => (
@@ -560,7 +710,10 @@ export function AdminDashboard() {
                   <AlertCircle className="h-12 w-12 text-red-400 mb-2 animate-bounce" />
                   <span className="text-lg font-semibold text-red-700">No se pudo cargar el resumen</span>
                   <span className="text-sm text-gray-500 mt-1">Reintentando automáticamente...</span>
-                  <Button onClick={() => loadDashboardData(false)} className="mt-4">Reintentar ahora</Button>
+                  <div className="flex flex-col gap-3 mt-4">
+                    <Button onClick={() => loadDashboardData(false)}>Reintentar ahora</Button>
+                    <span className="text-xs text-gray-400 text-center">Conectando con el servidor en tiempo real...</span>
+                  </div>
                 </div>
               ) : dashboardStats ? (
                 [
@@ -761,12 +914,14 @@ export function AdminDashboard() {
                       ))
                     ) : recentProperties.length > 0 ? (
                       recentProperties.map((property) => (
-                        <div key={property.id} className="flex items-center space-x-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                          <ImageWithFallback
-                            src={property.images?.[0] || 'https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=100'}
-                            alt={property.title}
-                            className="w-12 h-12 rounded-lg object-cover"
-                          />
+                        <div key={property.id} className="flex items-center space-x-4 p-3 rounded-lg hover:bg-blue-50 transition-colors group shadow-sm">
+                          <div className="w-20 h-14 flex items-center justify-center overflow-hidden rounded-xl shadow-md bg-white border border-gray-200 group-hover:scale-105 group-hover:shadow-lg transition-transform duration-200">
+                            <ImageWithFallback
+                              src={property.images && property.images.length > 0 ? property.images[0] : 'https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=100'}
+                              alt={property.title}
+                              className="object-cover w-full h-full rounded-xl transition-all duration-200 group-hover:opacity-90"
+                            />
+                          </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{property.title}</p>
                             <p className="text-xs text-gray-500">{property.location}</p>
@@ -1004,11 +1159,13 @@ export function AdminDashboard() {
                           <TableRow key={property.id}>
                             <TableCell>
                               <div className="flex items-center space-x-3">
-                                <ImageWithFallback
-                                  src={property.images?.[0] || 'https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=100'}
-                                  alt={property.title}
-                                  className="w-10 h-10 rounded object-cover"
-                                />
+                                <div className="w-16 h-10 flex items-center justify-center overflow-hidden rounded-lg shadow bg-white border border-gray-200">
+                                  <ImageWithFallback
+                                    src={property.images && property.images.length > 0 ? property.images[0] : 'https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=100'}
+                                    alt={property.title}
+                                    className="object-cover w-full h-full rounded-lg transition-all duration-200 hover:opacity-90"
+                                  />
+                                </div>
                                 <span className="font-medium">{property.title}</span>
                               </div>
                             </TableCell>

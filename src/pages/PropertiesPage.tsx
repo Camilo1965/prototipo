@@ -24,6 +24,26 @@ interface PropertiesPageProps {
 export function PropertiesPage({ onSelectProperty }: PropertiesPageProps) {
   const [properties, setProperties] = useState<Property[]>([]);
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
+  // Carrusel autoplay para cada card
+  const [carouselIndexes, setCarouselIndexes] = useState<{ [propertyId: string]: number }>({});
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCarouselIndexes((prev) => {
+        const updated: typeof prev = { ...prev };
+        filteredProperties.forEach((property) => {
+          const images = property.images && property.images.length > 0 ? property.images : [
+            'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600',
+          ];
+          const max = Math.min(images.length, 5);
+          const current = prev[property.id] ?? 0;
+          updated[property.id] = (current + 1) % max;
+        });
+        return updated;
+      });
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [filteredProperties]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showFilters, setShowFilters] = useState(false);
@@ -710,14 +730,39 @@ export function PropertiesPage({ onSelectProperty }: PropertiesPageProps) {
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
                     <div className="relative">
-                      <ImageWithFallback
-                        src={property.images?.[0] || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600'}
-                        alt={property.title}
-                        className="w-full h-64 object-cover group-hover:scale-110 transition-transform duration-500"
-                      />
-                      
-
-
+                      <div className="relative w-full h-64 overflow-hidden rounded-xl group">
+                        {(() => {
+                          const images = property.images && property.images.length > 0 ? property.images.slice(0, 5) : ['https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600'];
+                          const currentIdx = carouselIndexes[property.id] ?? 0;
+                          return (
+                            <>
+                              <ImageWithFallback
+                                key={images[currentIdx] + currentIdx}
+                                src={images[currentIdx]}
+                                alt={property.title}
+                                className="object-cover w-full h-64 rounded-xl shadow-lg transition-all duration-700"
+                              />
+                              {/* Controles minimalistas */}
+                              {images.length > 1 && (
+                                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2 z-20">
+                                  {images.map((_, dotIdx) => (
+                                    <button
+                                      key={dotIdx}
+                                      className={`w-2 h-2 rounded-full border border-white transition-all duration-200 ${dotIdx === currentIdx ? 'bg-blue-500 scale-125 shadow' : 'bg-white/70 hover:bg-blue-200'}`}
+                                      style={{ outline: 'none' }}
+                                      tabIndex={-1}
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        setCarouselIndexes(prev => ({ ...prev, [property.id]: dotIdx }));
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
                       <Badge 
                         className={`absolute top-4 right-4 ${
                           property.status === 'Vendido' ? 'bg-red-500' : 'bg-blue-500'
@@ -725,11 +770,9 @@ export function PropertiesPage({ onSelectProperty }: PropertiesPageProps) {
                       >
                         {property.status}
                       </Badge>
-
                       <button className="absolute bottom-4 right-4 p-2 bg-white/80 rounded-full hover:bg-white transition-colors group">
                         <Heart className="h-5 w-5 text-gray-600 group-hover:text-red-500 transition-colors" />
                       </button>
-
                       <div className="absolute bottom-4 left-4 bg-black/70 text-white px-3 py-2 rounded flex items-center">
                         <DollarSign className="h-4 w-4 mr-1" />
                         {typeof property.price === 'number' ? formatPrice(property.price) : formatPriceLegacy(property.price)}
@@ -794,11 +837,21 @@ export function PropertiesPage({ onSelectProperty }: PropertiesPageProps) {
                   >
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
                       <div className="relative">
-                        <ImageWithFallback
-                          src={property.images?.[0] || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600'}
-                          alt={property.title}
-                          className="w-full h-48 md:h-full object-cover rounded-lg"
-                        />
+                        <div className="flex w-full h-48 md:h-full gap-1 overflow-hidden">
+                          {(property.images && property.images.length > 0 ? property.images.slice(0,3) : ['https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600']).map((img, idx) => (
+                            <ImageWithFallback
+                              key={img + idx}
+                              src={img}
+                              alt={property.title}
+                              className={`object-cover ${property.images?.length === 1 ? 'w-full h-48 md:h-full' : 'w-1/3 h-48 md:h-full'} ${idx === 0 ? 'rounded-l-lg' : ''} ${idx === 2 || (property.images?.length === 2 && idx === 1) ? 'rounded-r-lg' : ''}`}
+                            />
+                          ))}
+                          {property.images && property.images.length > 3 && (
+                            <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full z-10">
+                              +{property.images.length - 3}
+                            </div>
+                          )}
+                        </div>
                         <Badge 
                           className={`absolute top-2 right-2 ${
                             property.status === 'Vendido' ? 'bg-red-500' : 'bg-blue-500'

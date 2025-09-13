@@ -1,6 +1,7 @@
 // CLEAN RESTORED STABLE VERSION
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
+import { NewPropertyModal } from './NewPropertyModal';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -9,9 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Slider } from '../ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Checkbox } from '../ui/checkbox';
-import { Search, Filter, Grid, List, MapPin, Bed, Bath, Square, Euro, Eye, Trash2, Star, Home, Building, MoreHorizontal, SortAsc, SortDesc, X } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
+import { Search, Filter, Grid, List, MapPin, Bed, Bath, Square, Eye, Trash2, Star, Home, MoreHorizontal, SortAsc, SortDesc, X, Plus } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { toast } from 'sonner';
+import { propertiesAPI } from '../../utils/api';
 
 interface Property {
   id: string;
@@ -149,13 +152,55 @@ const statusOptions = ['Todos', 'Activa', 'Vendida', 'Pendiente', 'Inactiva'];
 const agents = ['Todos', 'Ana García', 'Carlos Ruiz', 'María López'];
 
 export function AllPropertiesModal({ isOpen, onClose }: AllPropertiesModalProps) {
-  const [properties] = useState<Property[]>(allProperties);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [propertyToEdit, setPropertyToEdit] = useState<Property | null>(null);
+  const [properties, setProperties] = useState<Property[]>(allProperties);
   const [filteredProperties, setFilteredProperties] = useState<Property[]>(allProperties);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [sortBy, setSortBy] = useState('recent');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  
+  // Estado para el diálogo de confirmación de eliminación
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [propertyToDelete, setPropertyToDelete] = useState<Property | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Función para manejar la eliminación de propiedades
+  const handleDeleteProperty = async () => {
+    if (!propertyToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      // Llamar a la API para eliminar la propiedad
+      await propertiesAPI.delete(propertyToDelete.id);
+      
+      // Actualizar el estado local eliminando la propiedad
+      const updatedProperties = properties.filter(p => p.id !== propertyToDelete.id);
+      setProperties(updatedProperties);
+      setFilteredProperties(filteredProperties.filter(p => p.id !== propertyToDelete.id));
+      
+      toast.success('Propiedad eliminada exitosamente', {
+        description: `La propiedad "${propertyToDelete.title}" ha sido eliminada.`
+      });
+    } catch (error) {
+      console.error('Error al eliminar la propiedad:', error);
+      toast.error('Error al eliminar la propiedad', {
+        description: 'No se pudo eliminar la propiedad. Por favor, inténtelo de nuevo.'
+      });
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
+      setPropertyToDelete(null);
+    }
+  };
+  
+  // Función para abrir el diálogo de confirmación de eliminación
+  const confirmDelete = (property: Property) => {
+    setPropertyToDelete(property);
+    setIsDeleteDialogOpen(true);
+  };
 
   const [filters, setFilters] = useState({
     type: 'todos',
@@ -195,25 +240,26 @@ export function AllPropertiesModal({ isOpen, onClose }: AllPropertiesModalProps)
     if (filters.bathrooms) filtered = filtered.filter(p => p.bathrooms >= parseInt(filters.bathrooms));
     if (filters.featured) filtered = filtered.filter(p => p.featured);
     if (filters.amenities.length) filtered = filtered.filter(p => filters.amenities.every(a => p.amenities.includes(a)));
-    if (filters.condition !== 'Todas') filtered = filtered.filter(p => p.condition === filters.condition);
-    if (filters.energyRating !== 'Todas') filtered = filtered.filter(p => p.energyRating === filters.energyRating);
-
+    
+    // Ordenar resultados
     filtered.sort((a, b) => {
-      let cmp = 0;
-      switch (sortBy) {
-        case 'price': cmp = parseInt(a.price) - parseInt(b.price); break;
-        case 'area': cmp = a.area - b.area; break;
-        case 'views': cmp = a.views - b.views; break;
-        case 'title': cmp = a.title.localeCompare(b.title); break;
-        case 'recent': default:
-          cmp = new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime();
+      if (sortBy === 'recent') {
+        return new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime();
+      } else if (sortBy === 'price') {
+        return parseInt(a.price, 10) - parseInt(b.price, 10);
+      } else if (sortBy === 'views') {
+        return b.views - a.views;
       }
-      return sortOrder === 'asc' ? cmp : -cmp;
+      return 0;
     });
-    setFilteredProperties(filtered);
-  }, [properties, searchTerm, filters, sortBy, sortOrder]);
 
-  const formatPrice = (price: string) => new Intl.NumberFormat('es-ES').format(parseInt(price));
+    if (sortOrder === 'desc') {
+      filtered.reverse();
+    }
+
+    setFilteredProperties(filtered);
+  }, [searchTerm, filters, properties, sortBy, sortOrder]);
+
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'activa': return 'bg-green-500';
@@ -223,166 +269,260 @@ export function AllPropertiesModal({ isOpen, onClose }: AllPropertiesModalProps)
       default: return 'bg-gray-500';
     }
   };
-  const handleFilterChange = (key: string, value: any) => setFilters(f => ({ ...f, [key]: value }));
+
+  const formatPrice = (price: string) => {
+    return new Intl.NumberFormat('es-ES', { 
+      style: 'decimal',
+      maximumFractionDigits: 0,
+      minimumFractionDigits: 0,
+    }).format(parseInt(price, 10));
+  };
+
+  // Función de formato de fecha, útil para posibles usos futuros
+  /* const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('es-ES', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  }; */
+
   const clearFilters = () => {
     setFilters({
-      type: 'todos', location: 'Todas', status: 'Todos', agent: 'Todos', priceRange: [0, 1000000], areaRange: [0, 500], bedrooms: '', bathrooms: '', featured: false, amenities: [], condition: 'Todas', energyRating: 'Todas'
+      type: 'todos',
+      location: 'Todas',
+      status: 'Todos',
+      agent: 'Todos',
+      priceRange: [0, 1000000],
+      areaRange: [0, 500],
+      bedrooms: '',
+      bathrooms: '',
+      featured: false,
+      amenities: [],
+      condition: 'Todas',
+      energyRating: 'Todas'
     });
     setSearchTerm('');
   };
-  const handleAmenityToggle = (amenity: string) => setFilters(f => ({
-    ...f,
-    amenities: f.amenities.includes(amenity) ? f.amenities.filter(a => a !== amenity) : [...f.amenities, amenity]
-  }));
-
-  const availableAmenities = [
-    { id: 'parking', label: 'Parking' },
-    { id: 'terrace', label: 'Terraza' },
-    { id: 'garden', label: 'Jardín' },
-    { id: 'pool', label: 'Piscina' },
-    { id: 'elevator', label: 'Ascensor' },
-    { id: 'air_conditioning', label: 'Aire Acondicionado' },
-    { id: 'heating', label: 'Calefacción' },
-    { id: 'security', label: 'Seguridad' },
-    { id: 'storage', label: 'Trastero' },
-    { id: 'wifi', label: 'WiFi' }
-  ];
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-7xl max-h-[95vh] overflow-hidden">
-        <DialogHeader>
-          <DialogTitle className="flex items-center text-2xl">
-            <Building className="h-6 w-6 mr-2 text-primary" />
-            Todas las Propiedades
-            <Badge className="ml-3" variant="secondary">{filteredProperties.length} de {properties.length}</Badge>
-          </DialogTitle>
-          <DialogDescription>Gestiona y filtra todas las propiedades del inventario</DialogDescription>
+      <DialogContent className="max-w-6xl h-[90vh] p-0 flex flex-col">
+        <DialogHeader className="px-6 py-4 border-b">
+          <div className="flex items-center justify-between">
+            <div>
+              <DialogTitle className="text-2xl">Todas las Propiedades</DialogTitle>
+              <DialogDescription>Gestiona, edita y actualiza todas tus propiedades</DialogDescription>
+            </div>
+                        <div className="flex items-center space-x-2">
+              <Button onClick={() => toast('Nueva propiedad', { description: 'En desarrollo' })}>
+                <Plus className="mr-1 h-4 w-4" /> Nueva Propiedad
+              </Button>
+            </div>
+          </div>
         </DialogHeader>
-
-        <div className="flex flex-col h-full overflow-hidden">
-          <div className="space-y-4 border-b pb-4">
-            <div className="flex flex-col lg:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input placeholder="Buscar..." className="pl-10" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <div className="p-4 border-b flex justify-between items-center">
+            <div className="flex space-x-2 w-full max-w-md">
+              <div className="relative flex-1">
+                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <Input 
+                  placeholder="Buscar propiedades..." 
+                  className="pl-8"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
-              <div className="flex gap-2">
-                <Select value={filters.type} onValueChange={(v: string) => handleFilterChange('type', v)}>
-                  <SelectTrigger className="w-[140px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
-                  <SelectContent>
-                    {propertyTypes.map(t => <SelectItem key={t} value={t}>{t === 'todos' ? 'Todos' : t}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={filters.status} onValueChange={(v: string) => handleFilterChange('status', v)}>
-                  <SelectTrigger className="w-[120px]"><SelectValue placeholder="Estado" /></SelectTrigger>
-                  <SelectContent>
-                    {statusOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" onClick={() => setShowAdvancedFilters(s => !s)} className="flex items-center">
-                  <Filter className="h-4 w-4 mr-2" />Filtros{showAdvancedFilters && <X className="h-4 w-4 ml-2" />}
+              <Button 
+                variant="outline" 
+                onClick={() => setShowAdvancedFilters(prev => !prev)}
+              >
+                <Filter className="mr-1 h-4 w-4" /> {showAdvancedFilters ? 'Ocultar filtros' : 'Filtros'}
+              </Button>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="hidden md:flex space-x-1 border rounded-md p-1">
+                <Button 
+                  variant={viewMode === 'grid' ? 'default' : 'ghost'} 
+                  size="icon" 
+                  className="h-8 w-8" 
+                  onClick={() => setViewMode('grid')}
+                >
+                  <Grid className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant={viewMode === 'list' ? 'default' : 'ghost'} 
+                  size="icon" 
+                  className="h-8 w-8" 
+                  onClick={() => setViewMode('list')}
+                >
+                  <List className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="flex gap-2">
-                <div className="flex border rounded-lg">
-                  <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('grid')} className="rounded-r-none"><Grid className="h-4 w-4" /></Button>
-                  <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('list')} className="rounded-l-none"><List className="h-4 w-4" /></Button>
-                </div>
+              <div className="hidden sm:flex space-x-2">
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-[130px]">
+                    <span>Ordenar por</span>
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="recent">Más recientes</SelectItem>
+                    <SelectItem value="recent">Fecha</SelectItem>
                     <SelectItem value="price">Precio</SelectItem>
-                    <SelectItem value="area">Superficie</SelectItem>
-                    <SelectItem value="views">Más vistas</SelectItem>
-                    <SelectItem value="title">Título</SelectItem>
+                    <SelectItem value="views">Visitas</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button variant="outline" size="sm" onClick={() => setSortOrder(o => o === 'asc' ? 'desc' : 'asc')}>
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="h-10 w-10"
+                  onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                  title={sortOrder === 'asc' ? 'Descendente' : 'Ascendente'}
+                >
                   {sortOrder === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
+          </div>
+          <div className="flex flex-1 overflow-hidden">
             {showAdvancedFilters && (
-              <Card className="animate-in slide-in-from-top-2 fade-in">
+              <Card className="w-64 m-4 shrink-0 overflow-y-auto">
                 <CardContent className="p-4">
-                  <Tabs defaultValue="basic">
-                    <TabsList className="grid grid-cols-3 w-full">
+                  <h3 className="font-medium mb-3">Filtros avanzados</h3>
+                  <Tabs defaultValue="basic" className="w-full">
+                    <TabsList className="mb-4">
                       <TabsTrigger value="basic">Básicos</TabsTrigger>
-                      <TabsTrigger value="features">Características</TabsTrigger>
                       <TabsTrigger value="advanced">Avanzados</TabsTrigger>
                     </TabsList>
                     <TabsContent value="basic" className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div>
-                          <label className="text-sm mb-2 block">Ubicación</label>
-                          <Select value={filters.location} onValueChange={(v: string) => handleFilterChange('location', v)}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {locations.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <label className="text-sm mb-2 block">Agente</label>
-                          <Select value={filters.agent} onValueChange={(v: string) => handleFilterChange('agent', v)}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>{agents.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <label className="text-sm mb-2 block">Habitaciones mín.</label>
-                          <Select value={filters.bedrooms} onValueChange={(v: string) => handleFilterChange('bedrooms', v)}>
-                            <SelectTrigger><SelectValue placeholder="Cualquiera" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="">Cualquiera</SelectItem>
-                              <SelectItem value="1">1+</SelectItem>
-                              <SelectItem value="2">2+</SelectItem>
-                              <SelectItem value="3">3+</SelectItem>
-                              <SelectItem value="4">4+</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <label className="text-sm mb-2 block">Baños mín.</label>
-                          <Select value={filters.bathrooms} onValueChange={(v: string) => handleFilterChange('bathrooms', v)}>
-                            <SelectTrigger><SelectValue placeholder="Cualquiera" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="">Cualquiera</SelectItem>
-                              <SelectItem value="1">1+</SelectItem>
-                              <SelectItem value="2">2+</SelectItem>
-                              <SelectItem value="3">3+</SelectItem>
-                            </SelectContent>
-                          </Select>
+                      <div className="space-y-2">
+                        <label className="text-sm">Tipo de propiedad</label>
+                        <Select 
+                          value={filters.type} 
+                          onValueChange={(val: string) => setFilters({...filters, type: val})}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Todos los tipos" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {propertyTypes.map(type => (
+                              <SelectItem key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="text-sm">Ubicación</label>
+                        <Select 
+                          value={filters.location} 
+                          onValueChange={(val: string) => setFilters({...filters, location: val})}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Todas las ubicaciones" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {locations.map(location => (
+                              <SelectItem key={location} value={location}>{location}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="text-sm">Estado</label>
+                        <Select 
+                          value={filters.status} 
+                          onValueChange={(val: string) => setFilters({...filters, status: val})}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Todos los estados" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {statusOptions.map(status => (
+                              <SelectItem key={status} value={status}>{status}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="text-sm">Agente</label>
+                        <Select 
+                          value={filters.agent} 
+                          onValueChange={(val: string) => setFilters({...filters, agent: val})}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Todos los agentes" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {agents.map(agent => (
+                              <SelectItem key={agent} value={agent}>{agent}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="text-sm">Rango de precio</label>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs">{formatPrice(filters.priceRange[0].toString())}€</span>
+                          <Slider 
+                            min={0} 
+                            max={1000000} 
+                            step={10000} 
+                            value={[filters.priceRange[0], filters.priceRange[1]]} 
+                            onValueChange={(val: number[]) => setFilters({...filters, priceRange: [val[0], val[1]]})}
+                          />
+                          <span className="text-xs">{formatPrice(filters.priceRange[1].toString())}€</span>
                         </div>
                       </div>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="text-sm mb-2 block">Rango de precio: €{formatPrice(filters.priceRange[0].toString())} - €{formatPrice(filters.priceRange[1].toString())}</label>
-                          <Slider value={filters.priceRange} onValueChange={(v: number[]) => handleFilterChange('priceRange', v)} max={1000000} min={50000} step={10000} />
-                        </div>
-                        <div>
-                          <label className="text-sm mb-2 block">Superficie: {filters.areaRange[0]}m² - {filters.areaRange[1]}m²</label>
-                          <Slider value={filters.areaRange} onValueChange={(v: number[]) => handleFilterChange('areaRange', v)} max={500} min={30} step={10} />
-                        </div>
-                      </div>
-                    </TabsContent>
-                    <TabsContent value="features" className="space-y-4">
-                      <div>
-                        <label className="text-sm mb-3 block">Comodidades</label>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                          {availableAmenities.map(a => (
-                            <div key={a.id} className="flex items-center space-x-2">
-                              <Checkbox checked={filters.amenities.includes(a.id)} onCheckedChange={() => handleAmenityToggle(a.id)} />
-                              <label className="text-sm">{a.label}</label>
-                            </div>
-                          ))}
+                      
+                      <div className="space-y-2">
+                        <label className="text-sm">Superficie (m²)</label>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs">{filters.areaRange[0]} m²</span>
+                          <Slider 
+                            min={0} 
+                            max={500} 
+                            step={10} 
+                            value={[filters.areaRange[0], filters.areaRange[1]]} 
+                            onValueChange={(val: number[]) => setFilters({...filters, areaRange: [val[0], val[1]]})}
+                          />
+                          <span className="text-xs">{filters.areaRange[1]} m²</span>
                         </div>
                       </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-sm">Dormitorios</label>
+                          <Input 
+                            placeholder="Min." 
+                            value={filters.bedrooms} 
+                            onChange={(e) => setFilters({...filters, bedrooms: e.target.value})}
+                            type="number"
+                            min="0"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-sm">Baños</label>
+                          <Input 
+                            placeholder="Min." 
+                            value={filters.bathrooms} 
+                            onChange={(e) => setFilters({...filters, bathrooms: e.target.value})}
+                            type="number"
+                            min="0"
+                          />
+                        </div>
+                      </div>
+                      
                       <div className="flex items-center space-x-2">
-                        <Checkbox checked={filters.featured} onCheckedChange={(c: boolean) => handleFilterChange('featured', c)} />
-                        <label className="text-sm">Solo destacadas</label>
+                        <Checkbox 
+                          id="featured" 
+                          checked={filters.featured} 
+                          onCheckedChange={(checked: boolean | 'indeterminate') => 
+                            setFilters({...filters, featured: checked === true})
+                          }
+                        />
+                        <label htmlFor="featured" className="text-sm">Solo destacadas</label>
                       </div>
                     </TabsContent>
                     <TabsContent value="advanced" className="space-y-4">
@@ -411,7 +551,11 @@ export function AllPropertiesModal({ isOpen, onClose }: AllPropertiesModalProps)
                     {viewMode === 'grid' ? (
                       <div>
                         <div className="relative">
-                          <ImageWithFallback src={property.image} alt={property.title} className="w-full h-48 object-cover rounded-t-lg" />
+                          <ImageWithFallback
+                            src={property.image || 'https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=300'}
+                            alt={property.title}
+                            className="w-full h-48 object-cover rounded-t-xl shadow-md transition-transform duration-200 hover:scale-105 hover:shadow-xl"
+                          />
                           {property.featured && (
                             <Badge className="absolute top-2 left-2 bg-yellow-500"><Star className="h-3 w-3 mr-1" />Destacada</Badge>
                           )}
@@ -434,43 +578,46 @@ export function AllPropertiesModal({ isOpen, onClose }: AllPropertiesModalProps)
                           <div className="flex justify-between items-center">
                             <div className="flex space-x-1">
                               <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => toast.info('Vista previa (pendiente)')}><Eye className="h-3 w-3" /></Button>
-                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => toast.warning('Eliminar (pendiente)')}><Trash2 className="h-3 w-3" /></Button>
+                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => confirmDelete(property)}><Trash2 className="h-3 w-3" /></Button>
+                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setPropertyToEdit(property); setEditModalOpen(true); }} title="Editar propiedad completa"><svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13h3l8-8a2.828 2.828 0 00-4-4l-8 8v3zm0 0v3h3" /></svg></Button>
                             </div>
                             <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => toast('Más acciones próximamente')}><MoreHorizontal className="h-3 w-3" /></Button>
                           </div>
                         </CardContent>
                       </div>
                     ) : (
-                      <CardContent className="p-4">
-                        <div className="flex space-x-4">
-                          <div className="relative flex-shrink-0">
-                            <ImageWithFallback src={property.image} alt={property.title} className="w-24 h-24 object-cover rounded" />
-                            {property.featured && <Badge className="absolute -top-1 -right-1 bg-yellow-500 h-5 w-5 rounded-full p-0 flex items-center justify-center"><Star className="h-2 w-2" /></Badge>}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex justify-between items-start mb-2">
-                              <h3 className="font-medium line-clamp-1">{property.title}</h3>
-                              <div className="flex items-center ml-4"><Euro className="h-4 w-4 mr-1 text-primary" /><span className="font-medium text-primary">{formatPrice(property.price)}</span></div>
-                            </div>
-                            <div className="flex items-center text-gray-600 mb-2 text-sm"><MapPin className="h-3 w-3 mr-1" /><span>{property.location}</span><Badge className={`ml-2 ${getStatusColor(property.status)} text-xs`}>{property.status}</Badge></div>
-                            <p className="text-gray-600 text-sm mb-2 line-clamp-1">{property.description}</p>
-                            <div className="flex justify-between items-center">
-                              <div className="flex space-x-4 text-sm text-gray-600">
-                                {property.bedrooms > 0 && <div className="flex items-center"><Bed className="h-3 w-3 mr-1" /><span>{property.bedrooms} hab.</span></div>}
-                                <div className="flex items-center"><Bath className="h-3 w-3 mr-1" /><span>{property.bathrooms} baños</span></div>
-                                <div className="flex items-center"><Square className="h-3 w-3 mr-1" /><span>{property.area}m²</span></div>
-                                <div className="flex items-center"><Eye className="h-3 w-3 mr-1" /><span>{property.views}</span></div>
-                              </div>
-                              <div className="flex space-x-1">
-                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => toast.info('Vista previa (pendiente)')}><Eye className="h-3 w-3" /></Button>
-                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => toast.warning('Eliminar (pendiente)')}><Trash2 className="h-3 w-3" /></Button>
-                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => toast('Más acciones próximamente')}><MoreHorizontal className="h-3 w-3" /></Button>
-                              </div>
-                            </div>
-                            <div className="flex justify-between items-center text-xs text-gray-500 mt-2"><span>Agente: {property.agent}</span><span>{new Date(property.dateAdded).toLocaleDateString('es-ES')}</span></div>
-                          </div>
+                      <div className="flex p-4">
+                        <div className="relative w-48 h-24 mr-4 flex-shrink-0">
+                          <ImageWithFallback
+                            src={property.image || 'https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=300'}
+                            alt={property.title}
+                            className="w-full h-full object-cover rounded shadow transition-transform duration-200 hover:scale-105"
+                          />
+                          {property.featured && (
+                            <Badge className="absolute top-1 left-1 bg-yellow-500 scale-75"><Star className="h-3 w-3 mr-1" />Destacada</Badge>
+                          )}
+                          <Badge className={`absolute top-1 right-1 scale-75 ${getStatusColor(property.status)}`}>{property.status}</Badge>
                         </div>
-                      </CardContent>
+                        <div className="flex-1">
+                          <div className="flex justify-between mb-1">
+                            <h3 className="font-medium">{property.title}</h3>
+                            <span className="font-semibold text-sm">€{formatPrice(property.price)}</span>
+                          </div>
+                          <div className="flex items-center text-gray-600 mb-1 text-xs"><MapPin className="h-3 w-3 mr-1" /><span>{property.location}</span></div>
+                          <div className="flex space-x-4 text-xs text-gray-600 mb-2">
+                            <div className="flex items-center"><Bed className="h-3 w-3 mr-1" /><span>{property.bedrooms} hab.</span></div>
+                            <div className="flex items-center"><Bath className="h-3 w-3 mr-1" /><span>{property.bathrooms} baños</span></div>
+                            <div className="flex items-center"><Square className="h-3 w-3 mr-1" /><span>{property.area}m²</span></div>
+                            <div className="flex items-center"><Eye className="h-3 w-3 mr-1" /><span>{property.views}</span></div>
+                          </div>
+                          <div className="flex space-x-1">
+                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => toast.info('Vista previa (pendiente)')}><Eye className="h-3 w-3" /></Button>
+                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => confirmDelete(property)}><Trash2 className="h-3 w-3" /></Button>
+                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => toast('Más acciones próximamente')}><MoreHorizontal className="h-3 w-3" /></Button>
+                          </div>
+                          <div className="flex justify-between items-center text-xs text-gray-500 mt-2"><span>Agente: {property.agent}</span><span>{new Date(property.dateAdded).toLocaleDateString('es-ES')}</span></div>
+                        </div>
+                      </div>
                     )}
                   </Card>
                 ))}
@@ -479,6 +626,49 @@ export function AllPropertiesModal({ isOpen, onClose }: AllPropertiesModalProps)
           </div>
         </div>
       </DialogContent>
+
+      {/* Modal de edición */}
+      {propertyToEdit && (
+        <NewPropertyModal
+          isOpen={editModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          isEditing={true}
+          propertyData={propertyToEdit}
+          onPropertyCreated={() => { setEditModalOpen(false); setPropertyToEdit(null); }}
+        />
+      )}
+
+      {/* Diálogo de confirmación de eliminación */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar propiedad?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {propertyToDelete ? (
+                <>
+                  ¿Está seguro que desea eliminar la propiedad <strong>{propertyToDelete.title}</strong>?
+                  <p className="mt-2">Esta acción no se puede deshacer y la propiedad será eliminada permanentemente de la base de datos.</p>
+                </>
+              ) : (
+                <p>¿Está seguro que desea eliminar esta propiedad?</p>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={(e: React.MouseEvent<HTMLButtonElement>) => { 
+                e.preventDefault(); 
+                handleDeleteProperty(); 
+              }}
+              disabled={isDeleting}
+              className="bg-red-500 hover:bg-red-600 text-white"
+            >
+              {isDeleting ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

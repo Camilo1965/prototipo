@@ -30,7 +30,6 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { MapPin, Bed, Bath, Square, Eye, Calendar, ArrowLeft, Shield, CheckCircle, Share2, Heart, Compass, ListChecks } from 'lucide-react';
-import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '../components/ui/carousel';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { propertiesAPI, formatPrice, type Property, inquiriesAPI } from '../utils/api';
 import { MapPlaceholder } from '../components/MapPlaceholder';
@@ -46,6 +45,7 @@ interface PropertyDetailPageProps {
 
 
 function PropertyDetailPageInner({ propertyId, onBack, onNavigateToContact }: PropertyDetailPageProps) {
+  // Carrusel autoplay para detalle
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +54,10 @@ function PropertyDetailPageInner({ propertyId, onBack, onNavigateToContact }: Pr
   const [related, setRelated] = useState<Property[]>([]);
   const [contactSubmitting, setContactSubmitting] = useState(false);
   const [contactData, setContactData] = useState({ name: '', email: '', message: '' });
+
+  // Declarar images después de property y activeImage
+  // Declarar images después de property y activeImage
+  // (restaurado: no se usa images, solo property.images directamente)
 
   const handleContactChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -232,7 +236,7 @@ function PropertyDetailPageInner({ propertyId, onBack, onNavigateToContact }: Pr
 
   // Render
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white pb-20">
+  <div className="min-h-screen bg-gradient-to-br from-blue-50/60 via-white to-gray-100 pb-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {error && (
           <Card className="p-10 text-center animate-in fade-in">
@@ -254,62 +258,34 @@ function PropertyDetailPageInner({ propertyId, onBack, onNavigateToContact }: Pr
             {/* Layout principal */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
               <div className="xl:col-span-2 space-y-6">
-                <div className="relative rounded-2xl overflow-hidden shadow ring-1 ring-gray-200/60 group">
-                  <Carousel className="w-full" opts={{ loop: true }}>
-                    <CarouselContent className="h-[460px]">
-                      {(property.images && property.images.length > 0 ? property.images : [activeImage || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=1200']).slice(0,12).map((img, idx) => (
-                        <CarouselItem key={img + idx} className="basis-full">
-                          <div className="relative w-full h-full">
-                            <ImageWithFallback
-                              src={img}
-                              alt={property.title}
-                              className="w-full h-[460px] object-cover select-none pointer-events-none group-hover:scale-[1.02] transition-transform duration-700"
-                            />
-                            {idx === 0 && (
-                              <div className="absolute top-4 left-4 flex gap-2">
-                                <Badge className={property.status === 'Vendido' ? 'bg-red-600' : 'bg-blue-600'}>{property.status}</Badge>
-                              </div>
-                            )}
-                            {idx === 0 && (
-                              <div className="absolute top-4 right-4 flex gap-2">
-                                <button onClick={toggleFavorite} className={`p-2 rounded-full backdrop-blur bg-white/80 shadow hover:scale-105 transition ${isFavorite ? 'text-red-600' : 'text-gray-600'}`}>
-                                  <Heart className="h-5 w-5" fill={isFavorite ? 'currentColor' : 'none'} />
-                                </button>
-                                <button onClick={shareLink} className="p-2 rounded-full backdrop-blur bg-white/80 shadow hover:scale-105 transition text-gray-600">
-                                  <Share2 className="h-5 w-5" />
-                                </button>
-                              </div>
-                            )}
-                            {idx === 0 && (
-                              <div className="absolute bottom-4 left-4 bg-black/70 text-white px-5 py-3 rounded text-xl font-semibold flex items-center gap-2">
-                                {typeof property.price === 'number' ? formatPrice(property.price) : property.price}
-                              </div>
-                            )}
-                          </div>
-                        </CarouselItem>
-                      ))}
-                    </CarouselContent>
-                    <CarouselPrevious className="left-4 bg-white/80 backdrop-blur hover:bg-white" />
-                    <CarouselNext className="right-4 bg-white/80 backdrop-blur hover:bg-white" />
-                  </Carousel>
-                </div>
-                {property.images && property.images.length > 1 && (
-                  <div className="flex gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin scrollbar-thumb-gray-300">
-                    {property.images.slice(0,12).map(img => (
-                      <button
-                        key={img}
-                        onClick={() => setActiveImage(img)}
-                        className={`relative flex-shrink-0 rounded-lg overflow-hidden ring-2 transition h-20 w-28 md:w-32 ${activeImage === img ? 'ring-blue-500' : 'ring-transparent hover:ring-blue-300'}`}
-                      >
-                        <ImageWithFallback src={img} alt="miniatura" className="w-full h-full object-cover" />
+                <div className="flex justify-center items-center py-6">
+                  <div className="relative w-full">
+                    <ImageWithFallback
+                      src={property?.images && property.images.length > 0 ? property.images[0] : 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=1200'}
+                      alt={property?.title}
+                      className="w-full h-56 md:h-80 object-cover"
+                      style={{ display: 'block', borderRadius: 0, margin: 0, padding: 0, objectFit: 'cover' }}
+                    />
+                    <div className="absolute top-4 left-4 flex gap-2 z-10">
+                      <Badge className={property?.status === 'Vendido' ? 'bg-red-600' : 'bg-blue-600'}>{property?.status}</Badge>
+                    </div>
+                    <div className="absolute top-4 right-4 flex gap-2 z-10">
+                      <button onClick={toggleFavorite} className={`p-2 rounded-full backdrop-blur bg-white/80 shadow hover:scale-105 transition ${isFavorite ? 'text-red-600' : 'text-gray-600'}`}>
+                        <Heart className="h-5 w-5" fill={isFavorite ? 'currentColor' : 'none'} />
                       </button>
-                    ))}
+                      <button onClick={shareLink} className="p-2 rounded-full backdrop-blur bg-white/80 shadow hover:scale-105 transition text-gray-600">
+                        <Share2 className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-blue-50/90 text-blue-900 px-6 py-2 rounded-xl text-lg font-semibold flex items-center justify-center gap-2 shadow-sm z-10">
+                      {typeof property?.price === 'number' ? formatPrice(property.price) : property?.price}
+                    </div>
                   </div>
-                )}
+                </div>
 
                 {/* Sección descripción y características */}
                 <Card className="shadow-sm">
-                  <CardContent className="p-8 space-y-8">
+                  <CardContent className="p-6 md:p-8 space-y-8 bg-white/90 rounded-2xl border border-gray-100 shadow">
                     <div className="space-y-3">
                       <h2 className="text-3xl font-semibold tracking-tight flex items-center gap-2">
                         <span>{property.title}</span>

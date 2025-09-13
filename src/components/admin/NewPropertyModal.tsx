@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -29,7 +29,8 @@ import {
   X
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { propertiesAPI } from '../../utils/api';
+import { propertiesAPI, filesAPI } from '../../utils/api';
+import { Progress } from '../ui/progress';
 import { MapPicker } from './MapPicker';
 
 // Utilidad para extraer coordenadas desde URLs comunes de Google Maps
@@ -67,6 +68,8 @@ interface NewPropertyModalProps {
   isOpen: boolean;
   onClose: () => void;
   onPropertyCreated?: () => void;
+  property?: any; // Property para edición
+  mode?: 'create' | 'edit';
 }
 
 interface PropertyData {
@@ -116,6 +119,7 @@ interface PropertyData {
   communityFees: string;
   ibi: string;
   
+
   // Estado
   status: string;
   availability: string;
@@ -155,50 +159,150 @@ const securityFeatures = [
   'Seguridad 24h', 'Control de acceso'
 ];
 
-export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewPropertyModalProps) {
-  const [formData, setFormData] = useState<PropertyData>({
-    title: '',
-    description: '',
-    price: '',
-    propertyType: '',
-    operationType: '',
-    address: '',
-    city: '',
-    district: '',
-    postalCode: '',
-    latitude: '',
-    longitude: '',
-    bedrooms: 1,
-    bathrooms: 1,
-    totalArea: 50,
-    usableArea: 0,
-    plotArea: 0,
-    floor: '',
-    totalFloors: '',
-    yearBuilt: '',
-    condition: '',
-    orientation: '',
-    amenities: [],
-    features: [],
-    security: [],
-    energyRating: '',
-    heating: '',
-    cooling: '',
-    parking: '',
-    storage: false,
-    terrace: false,
-    balcony: false,
-    garden: false,
-    communityFees: '',
-    ibi: '',
-    status: 'Activa',
-    availability: 'Disponible',
-    featured: false
-    ,googleMapsUrl: ''
+export function NewPropertyModal({ isOpen, onClose, onPropertyCreated, property, mode = 'create', isEditing = false, propertyData = null }: NewPropertyModalProps & { isEditing?: boolean, propertyData?: any }) {
+  // Si tenemos propertyData (de la versión antigua) y estamos en modo edición, usarlo como property
+  const effectiveProperty = isEditing && propertyData ? propertyData : property;
+  // Aseguramos que el modo está definido
+  const editMode = mode === 'edit' || isEditing;
+  const [formData, setFormData] = useState<PropertyData>(() => {
+    if ((editMode && property) || (isEditing && propertyData)) {
+      // Utilizar effectiveProperty para los datos iniciales
+      // Mapear property a PropertyData según los campos disponibles
+      return {
+        title: effectiveProperty.title || '',
+        description: effectiveProperty.description || '',
+        price: effectiveProperty.price || '',
+        propertyType: effectiveProperty.type || '',
+        operationType: effectiveProperty.operationType || '',
+        address: effectiveProperty.address || '',
+        city: effectiveProperty.city || '',
+        district: effectiveProperty.district || '',
+        postalCode: effectiveProperty.postalCode || '',
+        latitude: effectiveProperty.latitude || '',
+        longitude: effectiveProperty.longitude || '',
+        bedrooms: effectiveProperty.bedrooms || 1,
+        bathrooms: effectiveProperty.bathrooms || 1,
+        totalArea: effectiveProperty.area || 50,
+        usableArea: effectiveProperty.usableArea || 0,
+        plotArea: effectiveProperty.plotArea || 0,
+        floor: effectiveProperty.floor || '',
+        totalFloors: effectiveProperty.totalFloors || '',
+        yearBuilt: effectiveProperty.yearBuilt || '',
+        condition: effectiveProperty.condition || '',
+        orientation: effectiveProperty.orientation || '',
+        amenities: effectiveProperty.amenities || [],
+        features: effectiveProperty.features || [],
+        security: effectiveProperty.security || [],
+        energyRating: effectiveProperty.energyRating || '',
+        heating: effectiveProperty.heating || '',
+        cooling: effectiveProperty.cooling || '',
+        parking: effectiveProperty.parking || '',
+        storage: effectiveProperty.storage || false,
+        terrace: effectiveProperty.terrace || false,
+        balcony: effectiveProperty.balcony || false,
+        garden: effectiveProperty.garden || false,
+        communityFees: effectiveProperty.communityFees || '',
+        ibi: effectiveProperty.ibi || '',
+        status: effectiveProperty.status || 'Activa',
+        availability: effectiveProperty.availability || 'Disponible',
+        featured: effectiveProperty.featured || false,
+        googleMapsUrl: effectiveProperty.googleMapsUrl || ''
+      };
+    }
+    return {
+      title: '',
+      description: '',
+      price: '',
+      propertyType: '',
+      operationType: '',
+      address: '',
+      city: '',
+      district: '',
+      postalCode: '',
+      latitude: '',
+      longitude: '',
+      bedrooms: 1,
+      bathrooms: 1,
+      totalArea: 50,
+      usableArea: 0,
+      plotArea: 0,
+      floor: '',
+      totalFloors: '',
+      yearBuilt: '',
+      condition: '',
+      orientation: '',
+      amenities: [],
+      features: [],
+      security: [],
+      energyRating: '',
+      heating: '',
+      cooling: '',
+      parking: '',
+      storage: false,
+      terrace: false,
+      balcony: false,
+      garden: false,
+      communityFees: '',
+      ibi: '',
+      status: 'Activa',
+      availability: 'Disponible',
+      featured: false,
+      googleMapsUrl: ''
+    };
   });
 
+  // Siempre empezamos en la pestaña básica para una experiencia consistente
   const [currentTab, setCurrentTab] = useState('basic');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Manejo de imágenes
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  // Estado de subida: { [file.name]: { progress: number, status: 'pending'|'uploading'|'success'|'error', url?: string, error?: string } }
+  const [uploadStatus, setUploadStatus] = useState<Record<string, { progress: number, status: string, url?: string, error?: string }>>({});
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [newImageUrl, setNewImageUrl] = useState('');
+
+  // Previsualización combinada
+  const allPreviewImages = [
+    ...imageUrls,
+    ...imageFiles.map(file => URL.createObjectURL(file))
+  ];
+
+  // Limpiar blobs al cerrar modal
+  useEffect(() => {
+  if (!isOpen) {
+      imageFiles.forEach(f => URL.revokeObjectURL(URL.createObjectURL(f)));
+      setImageFiles([]);
+      setImageUrls([]);
+      setNewImageUrl('');
+    }
+  }, [isOpen]);
+
+  const handleAddImageUrl = () => {
+    if (newImageUrl.trim() && !imageUrls.includes(newImageUrl.trim())) {
+      setImageUrls(prev => [...prev, newImageUrl.trim()]);
+      setNewImageUrl('');
+    }
+  };
+
+  const handleRemoveImage = (img: string) => {
+    setImageUrls(prev => prev.filter(url => url !== img));
+    setImageFiles(prev => prev.filter(f => URL.createObjectURL(f) !== img));
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const filesArr = Array.from(e.target.files ?? []);
+      setImageFiles(prev => [...prev, ...filesArr]);
+      // Inicializar estado de subida
+      setUploadStatus(prev => {
+        const next = { ...prev };
+        filesArr.forEach(f => {
+          next[f.name] = { progress: 0, status: 'pending' };
+        });
+        return next;
+      });
+    }
+  };
 
   const handleInputChange = (field: keyof PropertyData, value: any) => {
     setFormData(prev => ({
@@ -238,13 +342,13 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
     setIsSubmitting(true);
     
     try {
-      // Validar campos requeridos
-    const requiredFields = {
-      title: 'Título',
-      price: 'Precio',
-      propertyType: 'Tipo de propiedad',
-      city: 'Ciudad'
-    };
+      // Validar campos requeridos, los mismos para creación y edición
+      const requiredFields = {
+        title: 'Título',
+        price: 'Precio',
+        propertyType: 'Tipo de propiedad',
+        city: 'Ciudad'
+      };
 
     for (const [field, label] of Object.entries(requiredFields)) {
       if (!formData[field as keyof PropertyData]) {
@@ -277,6 +381,34 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
     const latNum = formData.latitude ? parseFloat(formData.latitude) : undefined;
     const lngNum = formData.longitude ? parseFloat(formData.longitude) : undefined;
     const coordsValid = typeof latNum === 'number' && !isNaN(latNum) && typeof lngNum === 'number' && !isNaN(lngNum);
+    // Subir imágenes locales al backend (ejemplo: Supabase Storage, aquí solo mock)
+    let uploadedImageUrls: string[] = [];
+    if (imageFiles.length > 0) {
+      uploadedImageUrls = await Promise.all(imageFiles.map(async (file) => {
+        setUploadStatus(prev => ({ ...prev, [file.name]: { ...prev[file.name], status: 'uploading', progress: 10 } }));
+        try {
+          // Simular progreso (si filesAPI.uploadImage no lo soporta)
+          let progress = 10;
+          const progressInterval = setInterval(() => {
+            progress = Math.min(progress + 20, 90);
+            setUploadStatus(prev => ({ ...prev, [file.name]: { ...prev[file.name], progress } }));
+          }, 300);
+          const res = await filesAPI.uploadImage(file);
+          clearInterval(progressInterval);
+          let url = '';
+          if (typeof res === 'string') url = res;
+          else if (res && res.url) url = res.url;
+          else if (res && res.path) url = res.path;
+          setUploadStatus(prev => ({ ...prev, [file.name]: { ...prev[file.name], status: 'success', progress: 100, url } }));
+          return url;
+        } catch (e) {
+          setUploadStatus(prev => ({ ...prev, [file.name]: { ...prev[file.name], status: 'error', progress: 100, error: e instanceof Error ? e.message : 'Error' } }));
+          toast.error('Error subiendo imagen: ' + (e instanceof Error ? e.message : ''));
+          return '';
+        }
+      }));
+      uploadedImageUrls = uploadedImageUrls.filter(Boolean);
+    }
     const propertyData: any = {
       title: formData.title,
       description: formData.description,
@@ -286,7 +418,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
       bedrooms: formData.bedrooms,
       bathrooms: formData.bathrooms,
       area: formData.totalArea,
-      images: [],
+      images: [...imageUrls, ...uploadedImageUrls],
       amenities: formData.amenities,
       features: formData.features,
       security: formData.security,
@@ -315,27 +447,27 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
       area: propertyData.area
     });
 
-    // Llamada real a la API
-    const response = await propertiesAPI.create(propertyData);
-    
-    if (response.error) {
-      throw new Error(response.error);
-    }
-
-    console.log('✅ Propiedad creada:', response.property);
-      
+    let response;
+    if (editMode && property && property.id) {
+      // Actualizar propiedad existente
+      console.log('Actualizando propiedad existente:', property.id, propertyData);
+      response = await propertiesAPI.update(property.id, propertyData);
+      if (response.error) {
+        throw new Error(response.error);
+      }
+      toast.success('Propiedad actualizada exitosamente', {
+        description: `${propertyData.title} ha sido actualizada`
+      });
+    } else {
+      // Crear nueva propiedad
+      response = await propertiesAPI.create(propertyData);
+      if (response.error) {
+        throw new Error(response.error);
+      }
       toast.success('Propiedad creada exitosamente', {
         description: `${response.property.title} ha sido añadida al inventario`
       });
-      
-      onClose();
-      
-      // Ejecutar callback si está disponible
-      if (onPropertyCreated) {
-        onPropertyCreated();
-      }
-      
-      // Reset form
+      // Reset form solo en modo creación
       setFormData({
         title: '',
         description: '',
@@ -373,30 +505,52 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
         ibi: '',
         status: 'Activa',
         availability: 'Disponible',
-        featured: false
-        ,googleMapsUrl: ''
+        featured: false,
+        googleMapsUrl: ''
       });
-      
-    } catch (error) {
-      console.error('❌ Error creando propiedad:', error);
-      toast.error('Error al crear la propiedad', {
-        description: error instanceof Error ? error.message : 'Por favor intenta de nuevo'
-      });
-    } finally {
-      setIsSubmitting(false);
     }
-  };
+    onClose();
+    // Ejecutar callback si está disponible
+    if (onPropertyCreated) {
+      onPropertyCreated();
+    }
+  } catch (error) {
+    console.error('❌ Error guardando propiedad:', error);
+    toast.error('Error al guardar la propiedad', {
+      description: error instanceof Error ? error.message : 'Por favor intenta de nuevo'
+    });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
+  // Debug para ver el modo y datos recibidos
+  useEffect(() => {
+    if (editMode) {
+      console.log('Modal abierto en modo EDICIÓN con datos:', property);
+    } else {
+      console.log('Modal abierto en modo CREACIÓN');
+    }
+  }, [editMode, property]);
+  
+  // Aseguramos iniciar con la pestaña básica para edición también
+  useEffect(() => {
+    // Resetear el tab a básico cuando se abre el modal
+    setCurrentTab('basic');
+  }, [isOpen]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+  <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center text-2xl">
             <Home className="h-6 w-6 mr-2 text-primary" />
-            Nueva Propiedad
+            {editMode ? 'Editar Propiedad Completa' : 'Nueva Propiedad'}
           </DialogTitle>
           <DialogDescription>
-            Completa todos los detalles para crear una nueva propiedad en el inventario
+            {editMode
+              ? 'Edición avanzada: Modifica todos los detalles de la propiedad usando las pestañas para acceder a todas las opciones.'
+              : 'Completa todos los detalles para crear una nueva propiedad en el inventario'}
           </DialogDescription>
         </DialogHeader>
 
@@ -412,6 +566,81 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
           <div className="overflow-y-auto max-h-[50vh] mt-4">
             {/* Información Básica */}
             <TabsContent value="basic" className="space-y-6">
+              {/* Imágenes */}
+              <div className="mb-4">
+                <Label className="block mb-1 font-semibold text-gray-700">Imágenes de la propiedad</Label>
+                <div className="w-full flex flex-col gap-2">
+                  <div
+                    className="w-full flex flex-col items-center justify-center border-2 border-dashed border-blue-300 rounded-xl bg-blue-50 hover:bg-blue-100 transition-colors duration-300 p-6 cursor-pointer mb-2"
+                    onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const files = e.dataTransfer.files;
+                      // Crear un input ficticio para simular el evento
+                      const fakeInput = { target: { files } } as React.ChangeEvent<HTMLInputElement>;
+                      handleFileChange(fakeInput);
+                    }}
+                    onClick={() => document.getElementById('file-upload-input')?.click()}
+                  >
+                    <input
+                      id="file-upload-input"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    <span className="text-blue-700 font-medium text-sm">Arrastra imágenes aquí o haz clic para seleccionar</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="url"
+                      placeholder="Pega una URL de imagen y presiona +"
+                      value={newImageUrl}
+                      onChange={e => setNewImageUrl(e.target.value)}
+                      className="w-full"
+                    />
+                    <Button type="button" onClick={handleAddImageUrl} disabled={!newImageUrl.trim()}>+</Button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+                    {allPreviewImages.length === 0 && (
+                      <div className="col-span-full text-center text-xs text-gray-400 py-6">No hay imágenes seleccionadas</div>
+                    )}
+                    {allPreviewImages.map((img, idx) => {
+                      const file = imageFiles.find(f => URL.createObjectURL(f) === img);
+                      const status = file ? uploadStatus[file.name] : undefined;
+                      return (
+                        <div
+                          key={img + idx}
+                          className="relative group rounded-xl overflow-hidden shadow-lg border border-gray-200 bg-white transition-transform duration-300 hover:scale-105 hover:shadow-2xl"
+                        >
+                          <img
+                            src={img}
+                            alt="preview"
+                            className="w-full h-40 object-cover rounded-xl group-hover:opacity-90 transition-opacity duration-200"
+                          />
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); handleRemoveImage(img); }}
+                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-7 h-7 flex items-center justify-center text-base shadow-lg opacity-80 hover:opacity-100 transition"
+                            title="Eliminar imagen"
+                          >×</button>
+                          {status && (
+                            <div className="absolute left-0 right-0 bottom-0">
+                              <Progress value={status.progress} className="h-1" />
+                              {status.status === 'uploading' && <span className="block text-[10px] text-blue-600 text-center">Subiendo...</span>}
+                              {status.status === 'success' && <span className="block text-[10px] text-green-600 text-center">¡Listo!</span>}
+                              {status.status === 'error' && <span className="block text-[10px] text-red-600 text-center">Error</span>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Puedes subir varias imágenes desde tu dispositivo, arrastrar y soltar, o agregar URLs. El orden se respeta al guardar.</p>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <Label htmlFor="title">Título de la propiedad *</Label>
@@ -977,7 +1206,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
               <Button variant="outline" onClick={onClose}>
                 Cancelar
               </Button>
-              <Button onClick={handleSubmit} disabled={isSubmitting}>
+              <Button onClick={handleSubmit} disabled={isSubmitting || Object.values(uploadStatus).some(s => s.status === 'uploading')}>
                 {isSubmitting ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
