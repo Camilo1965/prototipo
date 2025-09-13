@@ -1,0 +1,6 @@
+# Ignorar archivos problemáticos
+**/server/
+**/test/
+**/Code-component-*
+**/seedData.ts
+**/kv_store.tsx

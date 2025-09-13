@@ -1,7 +1,7 @@
 import { projectId, publicAnonKey } from './supabase/info';
 
 // Configuración base de la API
-const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-5b516b3d`;
+const API_BASE_URL = 'https://fonesjhtnuxlyxterlgv.supabase.co/functions/v1/simple'
 
 // Token de autenticación (se actualiza cuando el usuario se loguea)
 let authToken: string | null = null;
@@ -25,7 +25,7 @@ class ApiClient {
   }
 
   private getHeaders(includeAuth = false): HeadersInit {
-    const headers = { ...this.defaultHeaders };
+    const headers: any = { ...this.defaultHeaders };
     
     if (includeAuth && authToken) {
       headers['Authorization'] = `Bearer ${authToken}`;
@@ -239,7 +239,7 @@ export const propertiesAPI = {
       });
 
       const queryString = queryParams.toString();
-      const endpoint = `/properties${queryString ? `?${queryString}` : ''}`;
+      const endpoint = `/make-server-5b516b3d/properties${queryString ? `?${queryString}` : ''}`;
       
       const response = await apiClient.get(endpoint);
       return response;
@@ -257,19 +257,19 @@ export const propertiesAPI = {
   },
 
   async getById(id: string) {
-    return await apiClient.get(`/properties/${id}`);
+    return await apiClient.get(`/make-server-5b516b3d/properties/${id}`);
   },
 
   async create(propertyData: Omit<Property, 'id' | 'createdAt' | 'updatedAt'>) {
-    return await apiClient.post('/properties', propertyData, true);
+    return await apiClient.post('/make-server-5b516b3d/properties', propertyData, true);
   },
 
   async update(id: string, propertyData: Partial<Property>) {
-    return await apiClient.put(`/properties/${id}`, propertyData, true);
+    return await apiClient.put(`/make-server-5b516b3d/properties/${id}`, propertyData, true);
   },
 
   async delete(id: string) {
-    return await apiClient.delete(`/properties/${id}`, true);
+    return await apiClient.delete(`/make-server-5b516b3d/properties/${id}`, true);
   }
 };
 
@@ -277,15 +277,15 @@ export const propertiesAPI = {
 
 export const inquiriesAPI = {
   async create(inquiryData: Omit<Inquiry, 'id' | 'status' | 'createdAt' | 'updatedAt'>) {
-    return await apiClient.post('/inquiries', inquiryData);
+    return await apiClient.post('/make-server-5b516b3d/inquiries', inquiryData);
   },
 
   async getAll() {
-    return await apiClient.get('/inquiries', true);
+    return await apiClient.get('/make-server-5b516b3d/inquiries', true);
   },
 
   async updateStatus(id: string, status: Inquiry['status']) {
-    return await apiClient.put(`/inquiries/${id}/status`, { status }, true);
+    return await apiClient.put(`/make-server-5b516b3d/inquiries/${id}/status`, { status }, true);
   }
 };
 
@@ -300,8 +300,8 @@ export const filesAPI = {
 // ============= API DE DASHBOARD =============
 
 export const dashboardAPI = {
-  async getStats(): Promise<DashboardStats> {
-    return await apiClient.get('/dashboard/stats', true);
+  async getStats() {
+    return await apiClient.get('/make-server-5b516b3d/dashboard/stats', true);
   }
 };
 

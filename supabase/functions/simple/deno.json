@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "lib": ["deno.window", "deno.ns", "es2022"],
+    "strict": false,
+    "noImplicitAny": false,
+    "moduleResolution": "node"
+  },
+  "lint": {
+    "rules": {
+      "exclude": ["no-implicit-any"]
+    }
+  },
+  "imports": {
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2",
+    "std/": "https://deno.land/std@0.168.0/"
+  }
+}

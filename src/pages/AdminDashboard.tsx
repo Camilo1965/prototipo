@@ -8,8 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Progress } from '../components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Alert, AlertDescription } from '../components/ui/alert';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { useAuth } from '../hooks/useAuth';
 import { 
   Home, 
@@ -21,29 +20,22 @@ import {
   Edit,
   Trash2,
   Calendar,
-  MapPin,
-  Star,
-  Filter,
-  Download,
-  Upload,
   BarChart3,
-  PieChart,
   Activity,
   AlertCircle,
   CheckCircle,
   Clock,
   Mail,
   Phone,
-  Building,
   Key,
   Camera,
   Settings,
   LogOut,
-  Search,
-  MoreHorizontal,
   FileText,
   Globe,
   Shield,
+  Search,
+  Filter,
   Bell,
   MessageCircle,
   Archive
@@ -51,7 +43,7 @@ import {
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { useInView } from '../hooks/useInView';
 import { useRouter } from '../hooks/useRouter';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { NewPropertyModal } from '../components/admin/NewPropertyModal';
 import { AllPropertiesModal } from '../components/admin/AllPropertiesModal';
 import { EmailMarketingModal } from '../components/admin/EmailMarketingModal';
@@ -110,7 +102,7 @@ export function AdminDashboard() {
   const [hasVisitedInquiries, setHasVisitedInquiries] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+
   const [isNewPropertyModalOpen, setIsNewPropertyModalOpen] = useState(false);
   const [isAllPropertiesModalOpen, setIsAllPropertiesModalOpen] = useState(false);
   const [isEmailMarketingModalOpen, setIsEmailMarketingModalOpen] = useState(false);
@@ -121,6 +113,7 @@ export function AdminDashboard() {
   const [recentInquiries, setRecentInquiries] = useState<Inquiry[]>([]);
   const [allProperties, setAllProperties] = useState<Property[]>([]);
   const [allInquiries, setAllInquiries] = useState<Inquiry[]>([]);
+  const [inquiriesStats, setInquiriesStats] = useState({ total: 0, pending: 0, completed: 0, responded: 0 });
   const [loadingStats, setLoadingStats] = useState(true);
 
   const [propertyFilters, setPropertyFilters] = useState({
@@ -170,7 +163,7 @@ export function AdminDashboard() {
       const accessToken = await getAccessToken();
       
       // Cargar estadísticas del dashboard
-      const statsResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-5b516b3d/dashboard/stats`, {
+      const statsResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/simple/make-server-5b516b3d/dashboard/stats`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
@@ -183,7 +176,7 @@ export function AdminDashboard() {
       }
 
       // Cargar propiedades recientes
-      const propertiesResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-5b516b3d/properties?limit=5&sortBy=recent`, {
+      const propertiesResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/simple/make-server-5b516b3d/properties?limit=5&sortBy=recent`, {
         headers: {
           'Authorization': `Bearer ${publicAnonKey}`,
           'Content-Type': 'application/json'
@@ -196,7 +189,7 @@ export function AdminDashboard() {
       }
 
       // Cargar todas las propiedades
-      const allPropertiesResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-5b516b3d/properties`, {
+      const allPropertiesResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/simple/make-server-5b516b3d/properties`, {
         headers: {
           'Authorization': `Bearer ${publicAnonKey}`,
           'Content-Type': 'application/json'
@@ -209,7 +202,7 @@ export function AdminDashboard() {
       }
 
       // Cargar consultas
-      const inquiriesResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-5b516b3d/inquiries`, {
+      const inquiriesResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/simple/make-server-5b516b3d/inquiries`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
@@ -360,19 +353,6 @@ export function AdminDashboard() {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority.toLowerCase()) {
-      case 'alta':
-        return 'text-red-500 bg-red-50';
-      case 'media':
-        return 'text-yellow-600 bg-yellow-50';
-      case 'baja':
-        return 'text-green-600 bg-green-50';
-      default:
-        return 'text-gray-600 bg-gray-50';
-    }
-  };
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -443,7 +423,7 @@ export function AdminDashboard() {
   }
 
   return (
-    <div ref={dashboardRef} className="min-h-screen bg-gray-50">
+    <div ref={dashboardRef as React.RefObject<HTMLDivElement>} className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="relative bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg shadow-xl border-b border-slate-200/50 dark:border-slate-700/50">
         <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-blue-500/15 to-purple-500/20 -z-10" />
@@ -503,7 +483,7 @@ export function AdminDashboard() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Tabs value={activeTab} onValueChange={(value) => {
+        <Tabs value={activeTab} onValueChange={(value: string) => {
           setActiveTab(value);
           if (value === 'inquiries' && !hasVisitedInquiries) {
             setHasVisitedInquiries(true);
@@ -864,7 +844,7 @@ export function AdminDashboard() {
                     </div>
                     
                     <div className="flex gap-2">
-                      <Select value={propertyFilters.status} onValueChange={(value) => setPropertyFilters(prev => ({ ...prev, status: value }))}>
+                      <Select value={propertyFilters.status} onValueChange={(value: string) => setPropertyFilters(prev => ({ ...prev, status: value }))}>
                         <SelectTrigger className="w-[140px]">
                           <SelectValue placeholder="Estado" />
                         </SelectTrigger>
@@ -877,7 +857,7 @@ export function AdminDashboard() {
                         </SelectContent>
                       </Select>
 
-                      <Select value={propertyFilters.type} onValueChange={(value) => setPropertyFilters(prev => ({ ...prev, type: value }))}>
+                      <Select value={propertyFilters.type} onValueChange={(value: string) => setPropertyFilters(prev => ({ ...prev, type: value }))}>
                         <SelectTrigger className="w-[140px]">
                           <SelectValue placeholder="Tipo" />
                         </SelectTrigger>
@@ -891,7 +871,7 @@ export function AdminDashboard() {
                         </SelectContent>
                       </Select>
 
-                      <Select value={propertyFilters.agent} onValueChange={(value) => setPropertyFilters(prev => ({ ...prev, agent: value }))}>
+                      <Select value={propertyFilters.agent} onValueChange={(value: string) => setPropertyFilters(prev => ({ ...prev, agent: value }))}>
                         <SelectTrigger className="w-[140px]">
                           <SelectValue placeholder="Agente" />
                         </SelectTrigger>

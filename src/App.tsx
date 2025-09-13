@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { FeaturedProperties } from './components/FeaturedProperties';
@@ -21,8 +21,11 @@ import { ContactPage } from './pages/ContactPage';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { InquiriesPage } from './pages/InquiriesPage';
 
+import { PropertyDetailPage } from './pages/PropertyDetailPage';
+
 function AppContent() {
   const { currentPage, isTransitioning, navigateTo } = useRouter('inicio');
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
 
   useEffect(() => {
     // Smooth scrolling para toda la página
@@ -43,7 +46,7 @@ function AppContent() {
                 <Hero onNavigateToProperties={() => navigateTo('propiedades')} />
               </div>
               <div id="propiedades">
-                <FeaturedProperties />
+                <FeaturedProperties onSelectProperty={(id) => { setSelectedPropertyId(id); navigateTo('propiedad'); }} />
               </div>
               <div id="servicios">
                 <Services />
@@ -62,7 +65,20 @@ function AppContent() {
         return (
           <PageTransition pageKey="propiedades">
             <main className="pt-16">
-              <PropertiesPage />
+              <PropertiesPage onSelectProperty={(id) => { setSelectedPropertyId(id); navigateTo('propiedad'); }} />
+            </main>
+            <Footer />
+          </PageTransition>
+        );
+      case 'propiedad':
+        return (
+          <PageTransition pageKey="propiedad">
+            <main className="pt-16">
+              <PropertyDetailPage 
+                propertyId={selectedPropertyId} 
+                onBack={() => navigateTo('propiedades')} 
+                onNavigateToContact={() => navigateTo('contacto')} 
+              />
             </main>
             <Footer />
           </PageTransition>

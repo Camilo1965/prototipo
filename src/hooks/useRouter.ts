@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 
-export type Page = 'inicio' | 'propiedades' | 'servicios' | 'nosotros' | 'contacto' | 'admin' | 'consultas';
+export type Page = 'inicio' | 'propiedades' | 'propiedad' | 'servicios' | 'nosotros' | 'contacto' | 'admin' | 'consultas';
 
 export interface RouterState {
   currentPage: Page;

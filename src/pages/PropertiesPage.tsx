@@ -4,14 +4,13 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Slider } from '../components/ui/slider';
 import { MapPin, Bed, Bath, Square, Heart, Filter, Grid, List, Search, DollarSign, Calendar, Eye, CheckCircle, Star, Shield, X } from 'lucide-react';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { useInView } from '../hooks/useInView';
-import { toast } from 'sonner@2.0.3';
-import { propertiesAPI, type Property, type PropertyFilters, formatPrice, healthAPI } from '../utils/api';
+import { toast } from 'sonner';
+import { propertiesAPI, type Property, formatPrice, healthAPI } from '../utils/api';
 
 // Usar el tipo Property de la API
 
@@ -24,11 +23,24 @@ export function PropertiesPage() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<{
+    search: string;
+    type: string;
+    location: string;
+    priceRange: [number, number];
+    bedrooms: string;
+    bathrooms: string;
+    minArea: string;
+    status: string;
+    condition: string;
+    amenities: string[];
+    features: string[];
+    security: string[];
+  }>({
     search: '',
     type: 'all',
     location: 'all',
-    priceRange: [100000000, 1000000000],
+    priceRange: [0, 2000000000],
     bedrooms: 'all',
     bathrooms: 'all',
     minArea: '',
@@ -65,190 +77,41 @@ export function PropertiesPage() {
     try {
       setLoading(true);
       const response = await propertiesAPI.getAll({ limit: 50 });
-      
       if (response.properties && response.properties.length > 0) {
-        setProperties(response.properties);
-        setFilteredProperties(response.properties);
-        toast.success(`${response.properties.length} propiedades encontradas`);
+        // Normalizar propiedades (especialmente el precio) antes de guardar en estado
+        const normalized = response.properties.map((p: any) => {
+          // Intentar convertir price a número si viene como string formateada
+            let numericPrice: number = p.price;
+            if (typeof p.price === 'string') {
+              const digits = p.price.replace(/[^0-9]/g, '');
+              if (digits.length > 0) {
+                numericPrice = parseInt(digits, 10);
+              }
+            }
+            return {
+              ...p,
+              price: numericPrice,
+              bedrooms: p.bedrooms ?? 0,
+              bathrooms: p.bathrooms ?? 0,
+              area: p.area ?? 0,
+              views: p.views ?? 0,
+              createdAt: p.createdAt || new Date().toISOString(),
+            };
+        });
+        console.log('✅ Propiedades normalizadas:', normalized.map((p: any) => ({ id: p.id, price: p.price, rawPrice: response.properties.find((r: any) => r.id === p.id)?.price })));
+        setProperties(normalized);
+        setFilteredProperties(normalized);
+        toast.success(`${normalized.length} propiedades encontradas`);
       } else {
-        // Fallback a datos de ejemplo si no hay datos en la BD
-        const sampleProperties: Property[] = [
-          {
-            id: '1',
-            title: 'Casa Moderna en Centro',
-            price: 350000000,
-            location: 'Zona Rosa',
-            type: 'casa',
-            bedrooms: 3,
-            bathrooms: 2,
-            area: 150,
-            images: ['https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=600'],
-            description: 'Hermosa casa moderna completamente renovada en el corazón de Bogotá',
-            status: 'Disponible',
-            condition: 'Nuevo',
-            views: 245,
-            createdAt: '2024-01-15T10:00:00Z',
-            updatedAt: '2024-01-15T10:00:00Z',
-            amenities: ['parking', 'security', 'elevator'],
-            features: ['balcony', 'master_suite'],
-            security: ['alarm', 'cameras']
-          },
-          {
-            id: '2',
-            title: 'Apartamento Lujoso Chapinero',
-            price: 480000000,
-            location: 'Chapinero',
-            type: 'apartamento',
-            bedrooms: 2,
-            bathrooms: 2,
-            area: 95,
-            images: ['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=600'],
-            description: 'Elegante apartamento en la zona más exclusiva de Bogotá',
-            status: 'Disponible',
-            condition: 'Como nuevo',
-            views: 189,
-            createdAt: '2024-01-10T10:00:00Z',
-            updatedAt: '2024-01-10T10:00:00Z',
-            amenities: ['pool', 'gym', 'security'],
-            features: ['fireplace', 'walk_in_closet'],
-            security: ['concierge', 'gated']
-          },
-          {
-            id: '3',
-            title: 'Villa con Jardín Chía',
-            price: 720000000,
-            location: 'Chía',
-            type: 'chalet',
-            bedrooms: 4,
-            bathrooms: 3,
-            area: 220,
-            images: ['https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=600'],
-            description: 'Impresionante villa con jardín privado y piscina',
-            status: 'Disponible',
-            condition: 'Nuevo',
-            views: 312,
-            createdAt: '2024-01-08T10:00:00Z',
-            updatedAt: '2024-01-08T10:00:00Z',
-            amenities: ['pool', 'garden', 'parking', 'security'],
-            features: ['fireplace', 'gym', 'laundry'],
-            security: ['alarm', 'cameras', 'gated']
-          },
-          {
-            id: '4',
-            title: 'Oficina Moderna Usaquén',
-            price: 280000000,
-            location: 'Usaquén',
-            type: 'oficina',
-            bedrooms: 0,
-            bathrooms: 1,
-            area: 80,
-            images: ['https://images.unsplash.com/photo-1497366216548-37526070297c?w=600'],
-            description: 'Oficina completamente equipada en edificio empresarial',
-            status: 'Disponible',
-            condition: 'Buen estado',
-            views: 156,
-            createdAt: '2024-01-05T10:00:00Z',
-            updatedAt: '2024-01-05T10:00:00Z',
-            amenities: ['elevator', 'air_conditioning', 'wifi'],
-            features: ['balcony'],
-            security: ['doorman']
-          },
-          {
-            id: '5',
-            title: 'Ático con Terraza La Candelaria',
-            price: 890000000,
-            location: 'La Candelaria',
-            type: 'apartamento',
-            bedrooms: 3,
-            bathrooms: 2,
-            area: 120,
-            images: ['https://images.unsplash.com/photo-1502005229762-cf1b2da02f3f?w=600'],
-            description: 'Exclusivo ático con terraza panorámica',
-            status: 'Vendido',
-            condition: 'Como nuevo',
-            views: 425,
-            createdAt: '2024-01-03T10:00:00Z',
-            updatedAt: '2024-01-03T10:00:00Z',
-            amenities: ['terrace', 'elevator', 'air_conditioning'],
-            features: ['master_suite', 'walk_in_closet'],
-            security: ['concierge', 'cameras']
-          },
-          {
-            id: '6',
-            title: 'Casa Familiar Cajicá',
-            price: 550000000,
-            location: 'Cajicá',
-            type: 'casa',
-            bedrooms: 4,
-            bathrooms: 3,
-            area: 180,
-            images: ['https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=600'],
-            description: 'Perfecta para familias, con jardín y garaje',
-            status: 'Disponible',
-            condition: 'Buen estado',
-            views: 198,
-            createdAt: '2024-01-01T10:00:00Z',
-            updatedAt: '2024-01-01T10:00:00Z',
-            amenities: ['garden', 'parking', 'storage'],
-            features: ['laundry', 'fireplace'],
-            security: ['alarm', 'gated']
-          }
-        ];
-        
-        setProperties(sampleProperties);
-        setFilteredProperties(sampleProperties);
-        toast.info('Mostrando propiedades de ejemplo - El backend se está conectando');
+        setProperties([]);
+        setFilteredProperties([]);
+        toast.info('No hay propiedades registradas en la base de datos');
       }
     } catch (error) {
       console.error('Error loading properties:', error);
-      toast.warning('Usando datos de ejemplo - Verificando conexión con el backend');
-      
-      // Mostrar datos de ejemplo cuando hay error de conexión
-      const fallbackProperties: Property[] = [
-        {
-          id: '1',
-          title: 'Casa Moderna en Zona Rosa',
-          price: 450000000,
-          location: 'Zona Rosa',
-          type: 'casa',
-          bedrooms: 4,
-          bathrooms: 3,
-          area: 180,
-          images: ['https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=600'],
-          description: 'Hermosa casa moderna completamente renovada en el corazón de Bogotá',
-          status: 'Disponible',
-          condition: 'Nuevo',
-          views: 245,
-          createdAt: '2024-01-15T10:00:00Z',
-          updatedAt: '2024-01-15T10:00:00Z',
-          amenities: ['parking', 'security', 'elevator'],
-          features: ['balcony', 'master_suite'],
-          security: ['alarm', 'cameras']
-        },
-        {
-          id: '2',
-          title: 'Apartamento Lujoso Chapinero',
-          price: 380000000,
-          location: 'Chapinero',
-          type: 'apartamento',
-          bedrooms: 3,
-          bathrooms: 2,
-          area: 120,
-          images: ['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=600'],
-          description: 'Elegante apartamento en la zona más exclusiva de Bogotá',
-          status: 'Disponible',
-          condition: 'Como nuevo',
-          views: 189,
-          createdAt: '2024-01-10T10:00:00Z',
-          updatedAt: '2024-01-10T10:00:00Z',
-          amenities: ['pool', 'gym', 'security'],
-          features: ['fireplace', 'walk_in_closet'],
-          security: ['concierge', 'gated']
-        }
-      ];
-      
-      setProperties(fallbackProperties);
-      setFilteredProperties(fallbackProperties);
+      setProperties([]);
+      setFilteredProperties([]);
+      toast.warning('No se pudo conectar con el backend');
     } finally {
       setLoading(false);
     }
@@ -257,6 +120,10 @@ export function PropertiesPage() {
   // Filter and sort properties
   useEffect(() => {
     let filtered = [...properties];
+
+    console.groupCollapsed('%c[DEBUG] Filtro de propiedades', 'color: #2563eb');
+    console.log('Total inicial:', filtered.length);
+    console.log('Rango de precio activo:', filters.priceRange);
 
     // Apply filters
     if (filters.search) {
@@ -290,11 +157,14 @@ export function PropertiesPage() {
     // Filter by amenities, features, and security (for now, these are not in the sample data)
     // This will be useful when real data includes these fields
 
-    // Price range filter
+    // Price range filter (ignora precios NaN para no eliminar propiedades)
     filtered = filtered.filter(p => {
-      const price = typeof p.price === 'string' ? parseInt(p.price) : p.price;
-      return price >= filters.priceRange[0] && price <= filters.priceRange[1];
+      let priceNum = typeof p.price === 'string' ? parseInt(p.price) : p.price;
+      if (Number.isNaN(priceNum)) return true; // no filtrar si no se puede determinar
+      return priceNum >= filters.priceRange[0] && priceNum <= filters.priceRange[1];
     });
+
+    console.log('Después de filtros (sin sort):', filtered.length);
 
     // Apply sorting
     switch (sortBy) {
@@ -320,13 +190,28 @@ export function PropertiesPage() {
         break;
       default:
         filtered.sort((a, b) => {
-          const dateA = new Date(b.createdAt || b.dateAdded || 0).getTime();
-          const dateB = new Date(a.createdAt || a.dateAdded || 0).getTime();
+          const dateA = new Date(b.createdAt || 0).getTime();
+          const dateB = new Date(a.createdAt || 0).getTime();
           return dateA - dateB;
         });
     }
 
+    // Si no queda ninguna y había propiedades originales, intentar autoajustar rango
+    if (filtered.length === 0 && properties.length > 0) {
+      const numericPrices = properties
+        .map(p => (typeof p.price === 'string' ? parseInt(p.price) : p.price))
+        .filter(p => !Number.isNaN(p));
+      if (numericPrices.length > 0) {
+        const min = Math.min(...numericPrices);
+        const max = Math.max(...numericPrices);
+        console.warn('[DEBUG] No coincidencias; autoajustando rango de precio a', { min, max });
+        setFilters(prev => ({ ...prev, priceRange: [Math.max(0, min - 1), max + 1] }));
+      }
+    }
+
     setFilteredProperties(filtered);
+    console.log('Final (post-sort):', filtered.length);
+    console.groupEnd();
   }, [properties, filters, sortBy]);
 
   const handleFilterChange = (key: string, value: any) => {
@@ -361,7 +246,7 @@ export function PropertiesPage() {
   };
 
   return (
-    <div ref={pageRef} className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
+  <div ref={pageRef as React.RefObject<HTMLDivElement>} className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
       {/* Hero Section */}
       <section className="relative py-20 overflow-hidden">
         <div className="absolute inset-0">
@@ -528,7 +413,7 @@ export function PropertiesPage() {
                           </label>
                           <Select 
                             value={filters[filter.key as keyof typeof filters] as string} 
-                            onValueChange={(value) => handleFilterChange(filter.key as keyof typeof filters, value)}
+                            onValueChange={(value: string) => handleFilterChange(filter.key as keyof typeof filters, value)}
                           >
                             <SelectTrigger className="h-10 text-sm bg-white/70 border border-gray-300 hover:border-blue-400 focus:border-blue-500 transition-all duration-200 rounded-lg">
                               <SelectValue placeholder={filter.placeholder} />
@@ -561,12 +446,12 @@ export function PropertiesPage() {
                           Rango de Precio
                         </label>
                         <div className="px-3 py-1 bg-white rounded-lg shadow-sm border text-sm font-semibold text-blue-600">
-                          COP ${formatPrice(filters.priceRange[0].toString())} - COP ${formatPrice(filters.priceRange[1].toString())}
+                          COP ${formatPrice(filters.priceRange[0])} - COP ${formatPrice(filters.priceRange[1])}
                         </div>
                       </div>
                       <Slider
                         value={filters.priceRange}
-                        onValueChange={(value) => handleFilterChange('priceRange', value)}
+                        onValueChange={(value: [number, number]) => handleFilterChange('priceRange', value)}
                         max={1000000000}
                         min={50000000}
                         step={10000000}
@@ -772,20 +657,15 @@ export function PropertiesPage() {
                   >
                     <div className="relative">
                       <ImageWithFallback
-                        src={property.images?.[0] || property.image || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600'}
+                        src={property.images?.[0] || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600'}
                         alt={property.title}
                         className="w-full h-64 object-cover group-hover:scale-110 transition-transform duration-500"
                       />
                       
-                      {property.featured && (
-                        <Badge className="absolute top-4 left-4 bg-yellow-500">
-                          Destacada
-                        </Badge>
-                      )}
+
 
                       <Badge 
                         className={`absolute top-4 right-4 ${
-                          property.status === 'Nuevo' ? 'bg-green-500' :
                           property.status === 'Vendido' ? 'bg-red-500' : 'bg-blue-500'
                         }`}
                       >
@@ -832,7 +712,7 @@ export function PropertiesPage() {
                       <div className="flex items-center justify-between mb-4 text-xs text-gray-500">
                         <div className="flex items-center">
                           <Calendar className="h-3 w-3 mr-1" />
-                          <span>{new Date(property.createdAt || property.dateAdded || new Date()).toLocaleDateString('es-ES')}</span>
+                              <span>{new Date(property.createdAt || new Date()).toLocaleDateString('es-ES')}</span>
                         </div>
                         <div className="flex items-center">
                           <Eye className="h-3 w-3 mr-1" />
@@ -858,13 +738,12 @@ export function PropertiesPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
                       <div className="relative">
                         <ImageWithFallback
-                          src={property.images?.[0] || property.image || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600'}
+                          src={property.images?.[0] || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600'}
                           alt={property.title}
                           className="w-full h-48 md:h-full object-cover rounded-lg"
                         />
                         <Badge 
                           className={`absolute top-2 right-2 ${
-                            property.status === 'Nuevo' ? 'bg-green-500' :
                             property.status === 'Vendido' ? 'bg-red-500' : 'bg-blue-500'
                           }`}
                         >
@@ -915,7 +794,7 @@ export function PropertiesPage() {
                           <div className="flex gap-4 text-xs text-gray-500">
                             <div className="flex items-center">
                               <Calendar className="h-3 w-3 mr-1" />
-                              <span>{new Date(property.createdAt || property.dateAdded || new Date()).toLocaleDateString('es-ES')}</span>
+                              <span>{new Date(property.createdAt || new Date()).toLocaleDateString('es-ES')}</span>
                             </div>
                             <div className="flex items-center">
                               <Eye className="h-3 w-3 mr-1" />
