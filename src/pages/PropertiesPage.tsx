@@ -17,7 +17,11 @@ import { propertiesAPI, type Property, formatPrice, healthAPI } from '../utils/a
 const propertyTypes = ['casa', 'apartamento', 'chalet', 'oficina', 'local'];
 const locations = ['Zona Rosa', 'Chapinero', 'La Candelaria', 'Chía', 'Cajicá', 'Chia', 'Usaquén'];
 
-export function PropertiesPage() {
+interface PropertiesPageProps {
+  onSelectProperty?: (id: string) => void;
+}
+
+export function PropertiesPage({ onSelectProperty }: PropertiesPageProps) {
   const [properties, setProperties] = useState<Property[]>([]);
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -720,7 +724,10 @@ export function PropertiesPage() {
                         </div>
                       </div>
 
-                      <Button className="w-full group-hover:bg-primary group-hover:text-white transition-colors">
+                      <Button 
+                        className="w-full group-hover:bg-primary group-hover:text-white transition-colors"
+                        onClick={() => onSelectProperty?.(property.id)}
+                      >
                         Ver Detalles
                       </Button>
                     </CardContent>
@@ -801,7 +808,7 @@ export function PropertiesPage() {
                               <span>{property.views} vistas</span>
                             </div>
                           </div>
-                          <Button>Ver Detalles</Button>
+                          <Button onClick={() => onSelectProperty?.(property.id)}>Ver Detalles</Button>
                         </div>
                       </div>
                     </div>

@@ -24,7 +24,7 @@ import { InquiriesPage } from './pages/InquiriesPage';
 import { PropertyDetailPage } from './pages/PropertyDetailPage';
 
 function AppContent() {
-  const { currentPage, isTransitioning, navigateTo } = useRouter('inicio');
+  const { currentPage, navigateTo } = useRouter('inicio');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
 
   useEffect(() => {

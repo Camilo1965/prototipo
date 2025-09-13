@@ -23,7 +23,11 @@ interface Property {
   status: string;
 }
 
-export function FeaturedProperties() {
+interface FeaturedPropertiesProps {
+  onSelectProperty?: (id: string) => void;
+}
+
+export function FeaturedProperties({ onSelectProperty }: FeaturedPropertiesProps) {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const { ref: propertiesRef, hasBeenInView } = useInView(0.1);
@@ -165,10 +169,16 @@ export function FeaturedProperties() {
                   </div>
                 </div>
 
-                <Button 
-                  className="w-full hover:scale-105 transition-all duration-300" 
+                <Button
+                  className="w-full hover:scale-105 transition-all duration-300"
                   variant="outline"
-                  onClick={() => navigateTo('propiedades')}
+                  onClick={() => {
+                    if (onSelectProperty) {
+                      onSelectProperty(property.id);
+                    } else {
+                      navigateTo('propiedades');
+                    }
+                  }}
                 >
                   Ver Detalles
                 </Button>
