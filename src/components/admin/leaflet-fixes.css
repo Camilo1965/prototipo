@@ -1,0 +1,26 @@
+/* Corrige el problema del marcador en Leaflet */
+.leaflet-marker-icon {
+  background-image: url('/images/leaflet/marker-icon.png') !important;
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  width: 25px !important;
+  height: 41px !important;
+  margin-left: -12px !important;
+  margin-top: -41px !important;
+}
+
+.leaflet-marker-shadow {
+  background-image: url('/images/leaflet/marker-shadow.png') !important;
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  width: 41px !important;
+  height: 41px !important;
+  margin-left: -12px !important;
+  margin-top: -41px !important;
+}
+
+/* Oculta el texto "mark" que aparece cuando el ícono falla */
+.leaflet-marker-icon::after {
+  content: none !important;
+  display: none !important;
+}

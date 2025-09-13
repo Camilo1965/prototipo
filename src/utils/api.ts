@@ -166,6 +166,9 @@ export interface Property {
   createdAt: string;
   updatedAt: string;
   createdBy?: string;
+  lat?: number;
+  lng?: number;
+  googleMapsUrl?: string;
 }
 
 export interface Inquiry {

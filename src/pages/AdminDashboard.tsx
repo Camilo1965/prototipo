@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -115,6 +115,8 @@ export function AdminDashboard() {
   const [allInquiries, setAllInquiries] = useState<Inquiry[]>([]);
   const [inquiriesStats, setInquiriesStats] = useState({ total: 0, pending: 0, completed: 0, responded: 0 });
   const [loadingStats, setLoadingStats] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const retryTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const [propertyFilters, setPropertyFilters] = useState({
     search: '',
@@ -155,13 +157,12 @@ export function AdminDashboard() {
   }, []);
 
   // Función para cargar todos los datos del dashboard
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (isRetry = false) => {
     if (!user) return;
-    
+    setLoadError(false);
     try {
       setLoadingStats(true);
       const accessToken = await getAccessToken();
-      
       // Cargar estadísticas del dashboard
       const statsResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/simple/make-server-5b516b3d/dashboard/stats`, {
         headers: {
@@ -169,12 +170,12 @@ export function AdminDashboard() {
           'Content-Type': 'application/json'
         }
       });
-
       if (statsResponse.ok) {
         const stats = await statsResponse.json();
         setDashboardStats(stats);
+      } else {
+        throw new Error('No stats');
       }
-
       // Cargar propiedades recientes
       const propertiesResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/simple/make-server-5b516b3d/properties?limit=5&sortBy=recent`, {
         headers: {
@@ -182,12 +183,10 @@ export function AdminDashboard() {
           'Content-Type': 'application/json'
         }
       });
-
       if (propertiesResponse.ok) {
         const propertiesData = await propertiesResponse.json();
         setRecentProperties(propertiesData.properties || []);
       }
-
       // Cargar todas las propiedades
       const allPropertiesResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/simple/make-server-5b516b3d/properties`, {
         headers: {
@@ -195,12 +194,10 @@ export function AdminDashboard() {
           'Content-Type': 'application/json'
         }
       });
-
       if (allPropertiesResponse.ok) {
         const allPropertiesData = await allPropertiesResponse.json();
         setAllProperties(allPropertiesData.properties || []);
       }
-
       // Cargar consultas
       const inquiriesResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/simple/make-server-5b516b3d/inquiries`, {
         headers: {
@@ -208,19 +205,21 @@ export function AdminDashboard() {
           'Content-Type': 'application/json'
         }
       });
-
       if (inquiriesResponse.ok) {
         const inquiriesData = await inquiriesResponse.json();
         const inquiries = inquiriesData.inquiries || [];
         setAllInquiries(inquiries);
         setRecentInquiries(inquiries.slice(0, 5));
       }
-
-    } catch (error) {
-      console.error('Error cargando datos del dashboard:', error);
-      toast.error('Error cargando datos del dashboard');
-    } finally {
       setLoadingStats(false);
+    } catch (error) {
+      setLoadError(true);
+      setLoadingStats(false);
+      if (!isRetry) {
+        // Reintentar automáticamente después de 4 segundos
+        if (retryTimeout.current) clearTimeout(retryTimeout.current);
+        retryTimeout.current = setTimeout(() => loadDashboardData(true), 4000);
+      }
     }
   };
 
@@ -533,50 +532,65 @@ export function AdminDashboard() {
               hasBeenInView ? 'animate-in fade-in' : 'opacity-0'
             }`}>
               {loadingStats ? (
-                // Loading skeleton
-                Array.from({ length: 4 }).map((_, index) => (
-                  <Card key={index} className="hover:shadow-lg transition-shadow duration-300">
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-2">
-                          <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                          <div className="h-8 bg-gray-200 rounded animate-pulse"></div>
-                          <div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div>
-                        </div>
-                        <div className="h-8 w-8 bg-gray-200 rounded animate-pulse"></div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
+                <div className="col-span-4 flex flex-col items-center justify-center py-12 animate-pulse">
+                  <div className="mb-6 flex flex-col items-center">
+                    <BarChart3 className="h-12 w-12 text-blue-400 animate-bounce mb-2" />
+                    <span className="text-lg font-semibold text-blue-700 animate-pulse">Cargando resumen del panel...</span>
+                    <span className="text-sm text-gray-500 mt-1">Esto puede tardar unos segundos si el servidor está en frío.</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <Card key={index} className="hover:shadow-lg transition-shadow duration-300 animate-pulse">
+                        <CardContent className="p-6">
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-2">
+                              <div className="h-4 bg-blue-100 rounded animate-pulse"></div>
+                              <div className="h-8 bg-blue-200 rounded animate-pulse"></div>
+                              <div className="h-4 bg-blue-100 rounded animate-pulse w-20"></div>
+                            </div>
+                            <div className="h-8 w-8 bg-blue-200 rounded animate-pulse"></div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              ) : loadError ? (
+                <div className="col-span-4 flex flex-col items-center justify-center py-12 animate-fade-in">
+                  <AlertCircle className="h-12 w-12 text-red-400 mb-2 animate-bounce" />
+                  <span className="text-lg font-semibold text-red-700">No se pudo cargar el resumen</span>
+                  <span className="text-sm text-gray-500 mt-1">Reintentando automáticamente...</span>
+                  <Button onClick={() => loadDashboardData(false)} className="mt-4">Reintentar ahora</Button>
+                </div>
               ) : dashboardStats ? (
                 [
                   {
                     title: 'Propiedades Totales',
-                    value: dashboardStats.properties.total.toString(),
-                    change: `${dashboardStats.properties.available} disponibles`,
+                    value: dashboardStats.properties?.total?.toString() || "0",
+                    change: `${dashboardStats.properties?.available || 0} disponibles`,
                     trend: 'up',
                     icon: Home,
                     color: 'text-blue-500'
                   },
                   {
                     title: 'Propiedades Vendidas',
-                    value: dashboardStats.properties.sold.toString(),
-                    change: `de ${dashboardStats.properties.total} totales`,
+                    value: dashboardStats.properties?.sold?.toString() || "0",
+                    change: `de ${dashboardStats.properties?.total || 0} totales`,
                     trend: 'up',
                     icon: DollarSign,
                     color: 'text-green-500'
                   },
                   {
                     title: 'Consultas Totales',
-                    value: dashboardStats.inquiries.total.toString(),
-                    change: `${dashboardStats.inquiries.pending} pendientes`,
+                    value: dashboardStats.inquiries?.total?.toString() || "0",
+                    change: `${dashboardStats.inquiries?.pending || 0} pendientes`,
                     trend: 'up',
                     icon: MessageCircle,
                     color: 'text-purple-500'
                   },
                   {
                     title: 'Vistas Totales',
-                    value: dashboardStats.properties.totalViews.toString(),
+                    value: dashboardStats.properties?.totalViews?.toString() || "0",
                     change: 'en todas las propiedades',
                     trend: 'up',
                     icon: Eye,
@@ -602,16 +616,62 @@ export function AdminDashboard() {
                   );
                 })
               ) : (
-                // Error state
-                <Card className="col-span-4">
-                  <CardContent className="p-6 text-center">
-                    <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
-                    <p className="text-gray-600">Error cargando estadísticas</p>
-                    <Button onClick={loadDashboardData} className="mt-2">
-                      Reintentar
-                    </Button>
-                  </CardContent>
-                </Card>
+                // Fallback state para cuando no hay datos pero tampoco hay error
+                [
+                  {
+                    title: 'Propiedades Totales',
+                    value: "0",
+                    change: "0 disponibles",
+                    trend: 'up',
+                    icon: Home,
+                    color: 'text-blue-500'
+                  },
+                  {
+                    title: 'Propiedades Vendidas',
+                    value: "0",
+                    change: "de 0 totales",
+                    trend: 'up',
+                    icon: DollarSign,
+                    color: 'text-green-500'
+                  },
+                  {
+                    title: 'Consultas Totales',
+                    value: "0",
+                    change: "0 pendientes",
+                    trend: 'up',
+                    icon: MessageCircle,
+                    color: 'text-purple-500'
+                  },
+                  {
+                    title: 'Vistas Totales',
+                    value: "0",
+                    change: 'en todas las propiedades',
+                    trend: 'up',
+                    icon: Eye,
+                    color: 'text-yellow-500'
+                  }
+                ].map((stat, index) => {
+                  const IconComponent = stat.icon;
+                  return (
+                    <Card key={index} className="hover:shadow-lg transition-shadow duration-300" style={{ animationDelay: `${index * 100}ms` }}>
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-600">{stat.title}</p>
+                            <p className="text-2xl font-bold">{stat.value}</p>
+                            <p className="text-sm text-gray-500">
+                              {stat.change}
+                            </p>
+                            <Button onClick={loadDashboardData} size="sm" variant="link" className="p-0 h-auto text-xs text-primary mt-1">
+                              Cargar datos
+                            </Button>
+                          </div>
+                          <IconComponent className={`h-8 w-8 ${stat.color}`} />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })
               )}
             </div>
 

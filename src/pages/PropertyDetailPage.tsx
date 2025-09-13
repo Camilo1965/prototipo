@@ -1,12 +1,40 @@
-import { useEffect, useState, useCallback } from 'react';
+
+import React, { useEffect, useState, useCallback } from 'react';
+
+class DetailErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error, info: any) {
+    // Optionally log error
+    console.error('Error in PropertyDetailPage:', error, info);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-10 text-center text-red-600">
+          <h2 className="text-xl mb-4">Error en la página de detalle</h2>
+          <pre className="text-xs bg-gray-100 p-2 rounded max-w-xl mx-auto overflow-x-auto">{this.state.error.message}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { MapPin, Bed, Bath, Square, Eye, Calendar, ArrowLeft, Shield, CheckCircle, Share2, Heart, Compass, ListChecks } from 'lucide-react';
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '../components/ui/carousel';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
-import { propertiesAPI, formatPrice, type Property } from '../utils/api';
+import { propertiesAPI, formatPrice, type Property, inquiriesAPI } from '../utils/api';
 import { MapPlaceholder } from '../components/MapPlaceholder';
+import { PropertyMap } from '../components/PropertyMap';
 import { toast } from 'sonner';
 
 interface PropertyDetailPageProps {
@@ -15,12 +43,60 @@ interface PropertyDetailPageProps {
   onNavigateToContact: () => void;
 }
 
-export function PropertyDetailPage({ propertyId, onBack, onNavigateToContact }: PropertyDetailPageProps) {
+
+
+function PropertyDetailPageInner({ propertyId, onBack, onNavigateToContact }: PropertyDetailPageProps) {
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
   const [activeImage, setActiveImage] = useState<string | null>(null);
+  const [related, setRelated] = useState<Property[]>([]);
+  const [contactSubmitting, setContactSubmitting] = useState(false);
+  const [contactData, setContactData] = useState({ name: '', email: '', message: '' });
+
+  const handleContactChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setContactData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const submitInquiry = async () => {
+    if (!property) return;
+    if (!contactData.name || !contactData.email || !contactData.message) {
+      toast.error('Completa nombre, email y mensaje');
+      return;
+    }
+    try {
+      setContactSubmitting(true);
+      await inquiriesAPI.create({
+        name: contactData.name,
+        email: contactData.email,
+        message: contactData.message,
+        propertyId: property.id,
+        phone: ''
+      });
+      toast.success('Consulta enviada');
+      setContactData({ name: '', email: '', message: '' });
+    } catch (e) {
+      toast.error('No se pudo enviar');
+    } finally {
+      setContactSubmitting(false);
+    }
+  };
+
+  const loadRelated = useCallback(async (base: Property) => {
+    try {
+      const resp = await propertiesAPI.getAll({ limit: 50 });
+      if (resp.properties) {
+        const list: Property[] = resp.properties
+          .filter((p: Property) => p.id !== base.id && (p.type === base.type || p.location === base.location))
+          .slice(0, 6);
+        setRelated(list);
+      }
+    } catch (e) {
+      console.warn('No se pudieron cargar relacionadas');
+    }
+  }, []);
 
   // Cargar favoritos de localStorage
   useEffect(() => {
@@ -80,6 +156,7 @@ export function PropertyDetailPage({ propertyId, onBack, onNavigateToContact }: 
         if (active) {
           setProperty(prop);
           setActiveImage(prop.images?.[0] || null);
+          loadRelated(prop);
         }
       } catch (e: any) {
         if (active) setError(e.message || 'Error cargando propiedad');
@@ -91,32 +168,73 @@ export function PropertyDetailPage({ propertyId, onBack, onNavigateToContact }: 
     return () => { active = false; };
   }, [propertyId]);
 
+  // Dynamic SEO (title & meta description) when property data is available
+  useEffect(() => {
+    if (!property) return;
+    const previousTitle = document.title;
+    const newTitle = `${property.title} | Propiedad en ${property.location}`;
+    document.title = newTitle;
+
+    // Ensure / create meta description
+    let metaDesc = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
+    if (!metaDesc) {
+      metaDesc = document.createElement('meta');
+      metaDesc.name = 'description';
+      document.head.appendChild(metaDesc);
+    }
+    const previousDesc = metaDesc.content;
+    const generatedDesc = (property.description && property.description.trim().length > 0
+      ? property.description
+      : `${property.title} en ${property.location}. ${typeof property.price === 'number' ? 'Precio: ' + formatPrice(property.price) : ''}`)
+      .slice(0, 155);
+    metaDesc.content = generatedDesc;
+
+    // Basic structured data (JSON-LD) for rich snippets
+    const ldKey = 'ld-json-property-detail';
+    let ldScript = document.getElementById(ldKey) as HTMLScriptElement | null;
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'Residence',
+      name: property.title,
+      description: generatedDesc,
+      address: {
+        '@type': 'PostalAddress',
+        streetAddress: property.location,
+        addressCountry: 'ES'
+      },
+      floorSize: property.area ? { '@type': 'QuantitativeValue', value: property.area, unitCode: 'MTK' } : undefined,
+      numberOfRoomsTotal: property.bedrooms,
+      numberOfBathroomsTotal: property.bathrooms,
+      image: property.images?.slice(0, 6) || [],
+      offers: property.price ? {
+        '@type': 'Offer',
+        price: typeof property.price === 'number' ? property.price : undefined,
+        priceCurrency: 'USD',
+        availability: property.status === 'Vendido' ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock'
+      } : undefined
+    };
+    if (!ldScript) {
+      ldScript = document.createElement('script');
+      ldScript.type = 'application/ld+json';
+      ldScript.id = ldKey;
+      document.head.appendChild(ldScript);
+    }
+    ldScript.textContent = JSON.stringify(structuredData);
+
+    return () => {
+      document.title = previousTitle;
+      metaDesc.content = previousDesc;
+      if (ldScript) {
+        ldScript.remove();
+      }
+    };
+  }, [property]);
+
+  // Render
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white pb-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-4 py-6">
-          <Button variant="ghost" onClick={onBack} className="group">
-            <ArrowLeft className="h-4 w-4 mr-2 transition-transform group-hover:-translate-x-1" /> Volver
-          </Button>
-          <h1 className="text-2xl font-semibold">Detalle de Propiedad</h1>
-        </div>
-
-        {loading && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in">
-            <div className="lg:col-span-2 space-y-4">
-              <Skeleton className="h-96 w-full" />
-              <Skeleton className="h-10 w-1/2" />
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-4 w-2/3" />
-            </div>
-            <div className="space-y-4">
-              <Skeleton className="h-48 w-full" />
-              <Skeleton className="h-48 w-full" />
-            </div>
-          </div>
-        )}
-
-        {!loading && error && (
+        {error && (
           <Card className="p-10 text-center animate-in fade-in">
             <h2 className="text-xl mb-4">No se pudo cargar la propiedad</h2>
             <p className="text-gray-600 mb-6">{error}</p>
@@ -136,32 +254,54 @@ export function PropertyDetailPage({ propertyId, onBack, onNavigateToContact }: 
             {/* Layout principal */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
               <div className="xl:col-span-2 space-y-6">
-                <div className="relative rounded-2xl overflow-hidden shadow group ring-1 ring-gray-200/60">
-                  <ImageWithFallback
-                    src={activeImage || property.images?.[0] || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=1200'}
-                    alt={property.title}
-                    className="w-full h-[460px] object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                  <div className="absolute top-4 left-4 flex gap-2">
-                    <Badge className={property.status === 'Vendido' ? 'bg-red-600' : 'bg-blue-600'}>{property.status}</Badge>
-                  </div>
-                  <div className="absolute top-4 right-4 flex gap-2">
-                    <button onClick={toggleFavorite} className={`p-2 rounded-full backdrop-blur bg-white/80 shadow hover:scale-105 transition ${isFavorite ? 'text-red-600' : 'text-gray-600'}`}>
-                      <Heart className="h-5 w-5" fill={isFavorite ? 'currentColor' : 'none'} />
-                    </button>
-                    <button onClick={shareLink} className="p-2 rounded-full backdrop-blur bg-white/80 shadow hover:scale-105 transition text-gray-600">
-                      <Share2 className="h-5 w-5" />
-                    </button>
-                  </div>
-                  <div className="absolute bottom-4 left-4 bg-black/70 text-white px-5 py-3 rounded text-xl font-semibold flex items-center gap-2">
-                    {typeof property.price === 'number' ? formatPrice(property.price) : property.price}
-                  </div>
+                <div className="relative rounded-2xl overflow-hidden shadow ring-1 ring-gray-200/60 group">
+                  <Carousel className="w-full" opts={{ loop: true }}>
+                    <CarouselContent className="h-[460px]">
+                      {(property.images && property.images.length > 0 ? property.images : [activeImage || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=1200']).slice(0,12).map((img, idx) => (
+                        <CarouselItem key={img + idx} className="basis-full">
+                          <div className="relative w-full h-full">
+                            <ImageWithFallback
+                              src={img}
+                              alt={property.title}
+                              className="w-full h-[460px] object-cover select-none pointer-events-none group-hover:scale-[1.02] transition-transform duration-700"
+                            />
+                            {idx === 0 && (
+                              <div className="absolute top-4 left-4 flex gap-2">
+                                <Badge className={property.status === 'Vendido' ? 'bg-red-600' : 'bg-blue-600'}>{property.status}</Badge>
+                              </div>
+                            )}
+                            {idx === 0 && (
+                              <div className="absolute top-4 right-4 flex gap-2">
+                                <button onClick={toggleFavorite} className={`p-2 rounded-full backdrop-blur bg-white/80 shadow hover:scale-105 transition ${isFavorite ? 'text-red-600' : 'text-gray-600'}`}>
+                                  <Heart className="h-5 w-5" fill={isFavorite ? 'currentColor' : 'none'} />
+                                </button>
+                                <button onClick={shareLink} className="p-2 rounded-full backdrop-blur bg-white/80 shadow hover:scale-105 transition text-gray-600">
+                                  <Share2 className="h-5 w-5" />
+                                </button>
+                              </div>
+                            )}
+                            {idx === 0 && (
+                              <div className="absolute bottom-4 left-4 bg-black/70 text-white px-5 py-3 rounded text-xl font-semibold flex items-center gap-2">
+                                {typeof property.price === 'number' ? formatPrice(property.price) : property.price}
+                              </div>
+                            )}
+                          </div>
+                        </CarouselItem>
+                      ))}
+                    </CarouselContent>
+                    <CarouselPrevious className="left-4 bg-white/80 backdrop-blur hover:bg-white" />
+                    <CarouselNext className="right-4 bg-white/80 backdrop-blur hover:bg-white" />
+                  </Carousel>
                 </div>
                 {property.images && property.images.length > 1 && (
-                  <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-                    {property.images.slice(0, 10).map(img => (
-                      <button key={img} onClick={() => setActiveImage(img)} className={`relative rounded-lg overflow-hidden ring-2 transition ${activeImage === img ? 'ring-blue-500' : 'ring-transparent hover:ring-blue-300'}`}>
-                        <ImageWithFallback src={img} alt="miniatura" className="w-full h-20 object-cover" />
+                  <div className="flex gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin scrollbar-thumb-gray-300">
+                    {property.images.slice(0,12).map(img => (
+                      <button
+                        key={img}
+                        onClick={() => setActiveImage(img)}
+                        className={`relative flex-shrink-0 rounded-lg overflow-hidden ring-2 transition h-20 w-28 md:w-32 ${activeImage === img ? 'ring-blue-500' : 'ring-transparent hover:ring-blue-300'}`}
+                      >
+                        <ImageWithFallback src={img} alt="miniatura" className="w-full h-full object-cover" />
                       </button>
                     ))}
                   </div>
@@ -219,9 +359,52 @@ export function PropertyDetailPage({ propertyId, onBack, onNavigateToContact }: 
                       </div>
                     )}
                     <div>
-                      <h3 className="text-xl font-semibold mb-3">Ubicación</h3>
-                      <MapPlaceholder />
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-xl font-semibold">Ubicación</h3>
+                        {(property.lat && property.lng) && (
+                          <Button size="sm" variant="outline" onClick={() => {
+                            const url = property.googleMapsUrl || `https://www.google.com/maps?q=${property.lat},${property.lng}`;
+                            window.open(url, '_blank');
+                          }}>Ver en Google Maps</Button>
+                        )}
+                      </div>
+                      { property.lat != null && property.lng != null ? (
+                        <PropertyMap lat={property.lat} lng={property.lng} title={property.title} />
+                      ) : (
+                        <MapPlaceholder />
+                      ) }
                     </div>
+                    {related.length > 0 && (
+                      <div className="pt-4 border-t">
+                        <h3 className="text-xl font-semibold mb-4">Propiedades Relacionadas</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {related.map(r => (
+                            <div
+                              key={r.id}
+                              className="group rounded-xl overflow-hidden border bg-white shadow-sm hover:shadow-md transition cursor-pointer"
+                              onClick={() => {
+                                window.location.hash = `#/propiedad/${r.id}`;
+                              }}
+                            >
+                              <div className="relative h-40 overflow-hidden">
+                                <ImageWithFallback src={r.images?.[0] || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600'} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                <span className="absolute top-2 left-2 text-xs px-2 py-1 rounded bg-black/60 text-white">{r.type}</span>
+                                <span className="absolute bottom-2 left-2 text-sm bg-black/60 text-white px-2 py-1 rounded">{typeof r.price === 'number' ? formatPrice(r.price) : r.price}</span>
+                              </div>
+                              <div className="p-4 space-y-1">
+                                <p className="font-medium line-clamp-1">{r.title}</p>
+                                <p className="text-xs text-gray-500 flex items-center gap-1"><MapPin className="h-3 w-3" /> {r.location}</p>
+                                <div className="flex text-xs text-gray-500 gap-3 pt-1">
+                                  <span>{r.bedrooms} hab</span>
+                                  <span>{r.bathrooms} baños</span>
+                                  <span>{r.area} m²</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -267,11 +450,53 @@ export function PropertyDetailPage({ propertyId, onBack, onNavigateToContact }: 
                     </CardContent>
                   </Card>
                 )}
+                <Card>
+                  <CardContent className="p-6 space-y-4">
+                    <h3 className="font-semibold text-lg">Contacto Rápido</h3>
+                    <p className="text-xs text-gray-500 -mt-2">Solicita más información sobre esta propiedad</p>
+                    <div className="space-y-3">
+                      <input
+                        name="name"
+                        value={contactData.name}
+                        onChange={handleContactChange}
+                        placeholder="Nombre"
+                        className="w-full h-10 rounded-md border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        name="email"
+                        value={contactData.email}
+                        onChange={handleContactChange}
+                        placeholder="Email"
+                        type="email"
+                        className="w-full h-10 rounded-md border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <textarea
+                        name="message"
+                        value={contactData.message}
+                        onChange={handleContactChange}
+                        placeholder="Mensaje"
+                        rows={4}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      />
+                      <Button disabled={contactSubmitting} onClick={submitInquiry} className="w-full">
+                        {contactSubmitting ? 'Enviando...' : 'Enviar Consulta'}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </div>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+export function PropertyDetailPage(props: PropertyDetailPageProps) {
+  return (
+    <DetailErrorBoundary>
+      <PropertyDetailPageInner {...props} />
+    </DetailErrorBoundary>
   );
 }

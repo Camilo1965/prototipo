@@ -57,6 +57,56 @@ export function PropertiesPage({ onSelectProperty }: PropertiesPageProps) {
   const [sortBy, setSortBy] = useState('recent');
   const { ref: pageRef, hasBeenInView } = useInView(0.1);
 
+  // Dynamic SEO for listing page
+  useEffect(() => {
+    const prevTitle = document.title;
+    const prevDescEl = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
+    let meta = prevDescEl;
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'description';
+      document.head.appendChild(meta);
+    }
+    const prevDesc = meta.content;
+    const count = filteredProperties.length;
+    const desc = count > 0
+      ? `Explora ${count} propiedades en nuestra plataforma: casas, apartamentos y más en ubicaciones destacadas.`
+      : 'Explora propiedades disponibles: casas, apartamentos y más. Encuentra tu próximo hogar con nuestros filtros avanzados.';
+    document.title = count > 0 ? `(${count}) Propiedades disponibles | Listado` : 'Listado de Propiedades | Búsqueda';
+    meta.content = desc.slice(0, 155);
+
+    // Structured data ItemList
+    const ldId = 'ld-json-property-list';
+    let script = document.getElementById(ldId) as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement('script');
+      script.type = 'application/ld+json';
+      script.id = ldId;
+      document.head.appendChild(script);
+    }
+    const items = filteredProperties.slice(0, 20).map((p, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      url: `${window.location.origin}#/propiedad/${p.id}`,
+      name: p.title,
+      ...(typeof p.price === 'number' ? { price: p.price } : {})
+    }));
+    const ld = {
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: 'Listado de Propiedades',
+      numberOfItems: filteredProperties.length,
+      itemListElement: items
+    };
+    script.textContent = JSON.stringify(ld);
+
+    return () => {
+      document.title = prevTitle;
+      if (meta) meta.content = prevDesc;
+      if (script) script.remove();
+    };
+  }, [filteredProperties]);
+
 
 
   useEffect(() => {

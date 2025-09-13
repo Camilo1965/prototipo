@@ -1,0 +1,20 @@
+/* Global Leaflet marker fix */
+.leaflet-marker-icon:not([src]) {
+  background-image: url('/images/leaflet/marker-icon.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  width: 25px;
+  height: 41px;
+}
+.leaflet-marker-icon:not([src])::after {
+  content: none;
+}
+
+/* Fix for missing marker text */
+.leaflet-marker-icon img[alt="mark"] {
+  display: none;
+}
+
+.leaflet-marker-icon img[alt="mark"] + span {
+  display: none;
+}

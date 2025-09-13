@@ -5,19 +5,17 @@ import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Checkbox } from '../ui/checkbox';
+// Removed unused Checkbox import
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Separator } from '../ui/separator';
 import { Switch } from '../ui/switch';
-import { 
-  Home, 
-  MapPin, 
-  Euro, 
-  Bed, 
-  Bath, 
-  Square, 
+import {
+  Home,
+  Bed,
+  Bath,
+  Square,
   Car,
   Wifi,
   Shield,
@@ -26,16 +24,44 @@ import {
   Sun,
   AirVent,
   Zap,
-  Camera,
   Building,
-  Calendar,
-  Star,
   CheckCircle,
-  Plus,
   X
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { propertiesAPI } from '../../utils/api';
+import { MapPicker } from './MapPicker';
+
+// Utilidad para extraer coordenadas desde URLs comunes de Google Maps
+function extractCoords(url: string): { lat: number; lng: number } | null {
+  try {
+    // Patrones posibles:
+    // 1. .../@40.416775,-3.703790,17z/
+    const atMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+),/);
+    if (atMatch) {
+      const lat = parseFloat(atMatch[1]);
+      const lng = parseFloat(atMatch[2]);
+      if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+    }
+    // 2. ...?q=40.416775,-3.703790
+    const qMatch = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (qMatch) {
+      const lat = parseFloat(qMatch[1]);
+      const lng = parseFloat(qMatch[2]);
+      if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+    }
+    // 3. Coordenadas simples en path .../40.416775,-3.703790
+    const pathMatch = url.match(/\/(-?\d+\.\d+),(-?\d+\.\d+)(?:[/#?]|$)/);
+    if (pathMatch) {
+      const lat = parseFloat(pathMatch[1]);
+      const lng = parseFloat(pathMatch[2]);
+      if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 interface NewPropertyModalProps {
   isOpen: boolean;
@@ -94,6 +120,7 @@ interface PropertyData {
   status: string;
   availability: string;
   featured: boolean;
+  googleMapsUrl: string;
 }
 
 const propertyTypes = [
@@ -167,6 +194,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
     status: 'Activa',
     availability: 'Disponible',
     featured: false
+    ,googleMapsUrl: ''
   });
 
   const [currentTab, setCurrentTab] = useState('basic');
@@ -246,22 +274,35 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
     }
 
     // Convertir los datos del formulario al formato de la API
-    const propertyData = {
+    const latNum = formData.latitude ? parseFloat(formData.latitude) : undefined;
+    const lngNum = formData.longitude ? parseFloat(formData.longitude) : undefined;
+    const coordsValid = typeof latNum === 'number' && !isNaN(latNum) && typeof lngNum === 'number' && !isNaN(lngNum);
+    const propertyData: any = {
       title: formData.title,
       description: formData.description,
       price: parseInt(formData.price) || 0,
       location: `${formData.city}${formData.district ? ', ' + formData.district : ''}`,
-      type: formData.propertyType,
+      type: formData.propertyType || 'Otro',
       bedrooms: formData.bedrooms,
       bathrooms: formData.bathrooms,
       area: formData.totalArea,
-      images: [], // Las imágenes se pueden añadir después
+      images: [],
       amenities: formData.amenities,
       features: formData.features,
       security: formData.security,
-      status: 'Disponible',
+      status: 'Disponible' as 'Disponible',
       condition: formData.condition || 'Buen estado'
     };
+    if (coordsValid) {
+      propertyData.lat = latNum;
+      propertyData.lng = lngNum;
+    }
+    if (formData.googleMapsUrl) {
+      propertyData.googleMapsUrl = formData.googleMapsUrl.trim();
+    } else if (coordsValid) {
+      // generar url simple si no se proporcionó
+      propertyData.googleMapsUrl = `https://www.google.com/maps?q=${latNum},${lngNum}`;
+    }
 
     console.log('🔄 Enviando datos de propiedad:', propertyData);
     console.log('📋 Campos requeridos:', {
@@ -333,6 +374,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
         status: 'Activa',
         availability: 'Disponible',
         featured: false
+        ,googleMapsUrl: ''
       });
       
     } catch (error) {
@@ -384,7 +426,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
                 
                 <div>
                   <Label htmlFor="propertyType">Tipo de propiedad *</Label>
-                  <Select value={formData.propertyType} onValueChange={(value) => handleInputChange('propertyType', value)}>
+                  <Select value={formData.propertyType} onValueChange={(value: string) => handleInputChange('propertyType', value)}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Selecciona tipo" />
                     </SelectTrigger>
@@ -398,7 +440,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
 
                 <div>
                   <Label htmlFor="operationType">Tipo de operación *</Label>
-                  <Select value={formData.operationType} onValueChange={(value) => handleInputChange('operationType', value)}>
+                  <Select value={formData.operationType} onValueChange={(value: string) => handleInputChange('operationType', value)}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Selecciona operación" />
                     </SelectTrigger>
@@ -426,7 +468,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
 
                 <div>
                   <Label htmlFor="status">Estado</Label>
-                  <Select value={formData.status} onValueChange={(value) => handleInputChange('status', value)}>
+                  <Select value={formData.status} onValueChange={(value: string) => handleInputChange('status', value)}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
@@ -454,7 +496,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
                 <div className="md:col-span-2 flex items-center space-x-2">
                   <Switch
                     checked={formData.featured}
-                    onCheckedChange={(checked) => handleInputChange('featured', checked)}
+                    onCheckedChange={(checked: boolean) => handleInputChange('featured', checked)}
                   />
                   <Label>Marcar como propiedad destacada</Label>
                 </div>
@@ -473,6 +515,37 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
                     placeholder="Calle, número, etc."
                     className="mt-1"
                   />
+                </div>
+
+                <div className="md:col-span-2 space-y-2">
+                  <Label htmlFor="googleMapsUrl">URL de Google Maps (opcional)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="googleMapsUrl"
+                      value={formData.googleMapsUrl}
+                      onChange={(e) => handleInputChange('googleMapsUrl', e.target.value)}
+                      placeholder="Pega aquí la URL de Google Maps"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        if (!formData.googleMapsUrl) {
+                          toast.warning('Primero pega una URL');
+                          return;
+                        }
+                        const parsed = extractCoords(formData.googleMapsUrl);
+                        if (!parsed) {
+                          toast.error('No se pudieron extraer coordenadas');
+                          return;
+                        }
+                        handleInputChange('latitude', String(parsed.lat));
+                        handleInputChange('longitude', String(parsed.lng));
+                        toast.success('Coordenadas extraídas');
+                      }}
+                    >Extraer</Button>
+                  </div>
+                  <p className="text-xs text-gray-500">Acepta formatos con @lat,lng, o q=lat,lng. Si extraes, se rellenan las coordenadas y puedes ajustarlas en el mapa.</p>
                 </div>
 
                 <div>
@@ -507,26 +580,37 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
                     className="mt-1"
                   />
                 </div>
-
-                <div>
-                  <Label htmlFor="latitude">Latitud</Label>
-                  <Input
-                    id="latitude"
-                    value={formData.latitude}
-                    onChange={(e) => handleInputChange('latitude', e.target.value)}
-                    placeholder="40.4168"
-                    className="mt-1"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="longitude">Longitud</Label>
-                  <Input
-                    id="longitude"
-                    value={formData.longitude}
-                    onChange={(e) => handleInputChange('longitude', e.target.value)}
-                    placeholder="-3.7038"
-                    className="mt-1"
+                <div className="md:col-span-2 space-y-3 min-h-[28rem]">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Coordenadas (opcional)</Label>
+                      <p className="text-xs text-gray-500">Selecciona en el mapa o introduce manualmente</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Lat"
+                        value={formData.latitude}
+                        onChange={(e) => handleInputChange('latitude', e.target.value)}
+                        className="h-9 w-32"
+                      />
+                      <Input
+                        placeholder="Lng"
+                        value={formData.longitude}
+                        onChange={(e) => handleInputChange('longitude', e.target.value)}
+                        className="h-9 w-32"
+                      />
+                    </div>
+                  </div>
+                  <MapPicker
+                    lat={formData.latitude ? parseFloat(formData.latitude) : undefined}
+                    lng={formData.longitude ? parseFloat(formData.longitude) : undefined}
+                    onChange={({ lat, lng }) => {
+                      handleInputChange('latitude', String(lat));
+                      handleInputChange('longitude', String(lng));
+                      if (!formData.googleMapsUrl) {
+                        handleInputChange('googleMapsUrl', `https://www.google.com/maps?q=${lat},${lng}`);
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -618,7 +702,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
 
                 <div>
                   <Label htmlFor="condition">Estado</Label>
-                  <Select value={formData.condition} onValueChange={(value) => handleInputChange('condition', value)}>
+                  <Select value={formData.condition} onValueChange={(value: string) => handleInputChange('condition', value)}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Selecciona estado" />
                     </SelectTrigger>
@@ -634,7 +718,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
 
                 <div>
                   <Label htmlFor="orientation">Orientación</Label>
-                  <Select value={formData.orientation} onValueChange={(value) => handleInputChange('orientation', value)}>
+                  <Select value={formData.orientation} onValueChange={(value: string) => handleInputChange('orientation', value)}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Selecciona orientación" />
                     </SelectTrigger>
@@ -653,7 +737,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
 
                 <div>
                   <Label htmlFor="energyRating">Certificado energético</Label>
-                  <Select value={formData.energyRating} onValueChange={(value) => handleInputChange('energyRating', value)}>
+                  <Select value={formData.energyRating} onValueChange={(value: string) => handleInputChange('energyRating', value)}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Selecciona" />
                     </SelectTrigger>
@@ -759,7 +843,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="heating">Calefacción</Label>
-                  <Select value={formData.heating} onValueChange={(value) => handleInputChange('heating', value)}>
+                  <Select value={formData.heating} onValueChange={(value: string) => handleInputChange('heating', value)}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Tipo de calefacción" />
                     </SelectTrigger>
@@ -776,7 +860,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
 
                 <div>
                   <Label htmlFor="parking">Parking</Label>
-                  <Select value={formData.parking} onValueChange={(value) => handleInputChange('parking', value)}>
+                  <Select value={formData.parking} onValueChange={(value: string) => handleInputChange('parking', value)}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Tipo de parking" />
                     </SelectTrigger>
@@ -821,7 +905,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
                   <div className="flex items-center space-x-2">
                     <Switch
                       checked={formData.storage}
-                      onCheckedChange={(checked) => handleInputChange('storage', checked)}
+                      onCheckedChange={(checked: boolean) => handleInputChange('storage', checked)}
                     />
                     <Label>Trastero</Label>
                   </div>
@@ -829,7 +913,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
                   <div className="flex items-center space-x-2">
                     <Switch
                       checked={formData.terrace}
-                      onCheckedChange={(checked) => handleInputChange('terrace', checked)}
+                      onCheckedChange={(checked: boolean) => handleInputChange('terrace', checked)}
                     />
                     <Label>Terraza</Label>
                   </div>
@@ -837,7 +921,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
                   <div className="flex items-center space-x-2">
                     <Switch
                       checked={formData.balcony}
-                      onCheckedChange={(checked) => handleInputChange('balcony', checked)}
+                      onCheckedChange={(checked: boolean) => handleInputChange('balcony', checked)}
                     />
                     <Label>Balcón</Label>
                   </div>
@@ -845,7 +929,7 @@ export function NewPropertyModal({ isOpen, onClose, onPropertyCreated }: NewProp
                   <div className="flex items-center space-x-2">
                     <Switch
                       checked={formData.garden}
-                      onCheckedChange={(checked) => handleInputChange('garden', checked)}
+                      onCheckedChange={(checked: boolean) => handleInputChange('garden', checked)}
                     />
                     <Label>Jardín</Label>
                   </div>

@@ -20,6 +20,9 @@ interface Property {
   features?: string[];
   security?: string[];
   condition?: string;
+  lat?: number;
+  lng?: number;
+  googleMapsUrl?: string;
 }
 
 interface Inquiry {
@@ -212,6 +215,53 @@ serve(async (req: Request) => {
           status: 201,
         }
       )
+    }
+
+    // Update existing property (partial)
+    if (path.startsWith('/simple/make-server-5b516b3d/properties/') && req.method === 'PUT') {
+      const id = path.split('/').pop()
+      const body = await req.json()
+
+      // Fetch existing
+      const { data, error } = await supabaseAdmin
+        .from('kv_store_5b516b3d')
+        .select('value')
+        .eq('key', `property:${id}`)
+        .single()
+
+      if (error || !data) {
+        return new Response(JSON.stringify({ error: 'Propiedad no encontrada' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 404
+        })
+      }
+
+      let existing: any
+      try {
+        existing = typeof data.value === 'string' ? JSON.parse(data.value) : data.value
+      } catch {
+        existing = data.value
+      }
+
+      const updated = {
+        ...existing,
+        ...body,
+        updatedAt: new Date().toISOString()
+      }
+
+      const { error: updateError } = await supabaseAdmin
+        .from('kv_store_5b516b3d')
+        .update({ value: JSON.stringify(updated) })
+        .eq('key', `property:${id}`)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      return new Response(JSON.stringify({ property: updated }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      })
     }
 
     // Dashboard stats route
