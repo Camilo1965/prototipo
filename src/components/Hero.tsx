@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent } from './ui/card';
 import { Search, MapPin, Home, Users, Award, Sparkles } from 'lucide-react';
-import { ImageWithFallback } from './figma/ImageWithFallback';
 import { useInView } from '../hooks/useInView';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface HeroProps {
   onSearch?: (searchData: { location: string; type: string }) => void;
@@ -51,14 +50,30 @@ export function Hero({ onSearch, onNavigateToProperties }: HeroProps) {
   };
   return (
     <section ref={heroRef} id="inicio" className="relative min-h-screen flex items-center overflow-hidden">
-      {/* Background Image */}
+      {/* Background Video */}
       <div className="absolute inset-0 z-0">
-        <ImageWithFallback
-          src="https://images.unsplash.com/photo-1706808849827-7366c098b317?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBtb2Rlcm4lMjBob3VzZSUyMGV4dGVyaW9yfGVufDF8fHx8MTc1NzQ3MDA4OHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
-          alt="Casa moderna de lujo"
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
           className="w-full h-full object-cover scale-105 animate-in zoom-in-95 duration-1000"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/40 to-black/50"></div>
+          poster="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80"
+        >
+          {/* Tu video de ciudad local */}
+          <source src="/videos/ciudad.mp4" type="video/mp4" />
+          
+          {/* Video de respaldo desde URL externa */}
+          <source src="https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_5mb.mp4" type="video/mp4" />
+          
+          {/* Fallback para navegadores que no soportan video */}
+          <img
+            src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80"
+            alt="Vista aérea espectacular de ciudad moderna de día"
+            className="w-full h-full object-cover scale-105"
+          />
+        </video>
+        <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/30"></div>
       </div>
 
       {/* Floating elements */}
@@ -85,18 +100,26 @@ export function Hero({ onSearch, onNavigateToProperties }: HeroProps) {
             Más de 10 años ayudando a familias y inversionistas a encontrar la propiedad ideal
           </p>
 
-          {/* Search Form */}
-          <div className={`max-w-4xl mx-auto bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-2xl border border-white/20 transition-all duration-1000 delay-500 ${
+          {/* Search Form - Diseño Premium Glassmorphism */}
+          <div className={`max-w-4xl mx-auto relative group transition-all duration-1000 delay-500 ${
             hasBeenInView ? 'animate-in slide-in-from-bottom-4 fade-in' : 'opacity-0 translate-y-4'
           }`}>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Fondo con efecto glassmorphism premium - Sin bordes */}
+            <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-white/5 to-white/10 backdrop-blur-xl rounded-3xl shadow-2xl"></div>
+            
+            {/* Resplandor sutil alrededor del formulario */}
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 rounded-3xl blur-xl opacity-70 group-hover:opacity-90 transition-opacity duration-500"></div>
+            
+            {/* Contenido del formulario */}
+            <div className="relative z-10 p-8 rounded-3xl">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="md:col-span-2">
                 <div className="relative group">
-                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5 group-focus-within:text-primary transition-colors" />
+                  <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5 group-focus-within:text-primary transition-colors z-10" />
                   <Input
                     type="text"
-                    placeholder="Ubicación (ej. Madrid, Barcelona...)"
-                    className="pl-10 h-12 border-gray-200 focus:border-primary focus:ring-primary/20 transition-all duration-300"
+                    placeholder="¿Dónde quieres vivir? (Madrid, Barcelona...)"
+                    className="pl-12 h-14 border-0 bg-white/10 backdrop-blur-sm text-white placeholder:text-white/60 focus:border-0 focus:ring-primary/20 focus:bg-white/15 transition-all duration-300 hover:bg-white/15 rounded-2xl text-base focus:ring-2"
                     value={searchData.location}
                     onChange={(e) => setSearchData(prev => ({ ...prev, location: e.target.value }))}
                     onKeyPress={handleKeyPress}
@@ -105,21 +128,21 @@ export function Hero({ onSearch, onNavigateToProperties }: HeroProps) {
               </div>
               <div>
                 <select 
-                  className="w-full h-12 px-3 rounded-md border border-gray-200 bg-white text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-300"
+                  className="w-full h-14 px-4 rounded-2xl border-0 bg-white/10 backdrop-blur-sm text-white focus:border-0 focus:ring-2 focus:ring-primary/20 focus:bg-white/15 transition-all duration-300 hover:bg-white/15 text-base [&>option]:bg-gray-800 [&>option]:text-white"
                   value={searchData.type}
                   onChange={(e) => setSearchData(prev => ({ ...prev, type: e.target.value }))}
                 >
                   <option value="">Tipo de propiedad</option>
-                  <option value="casa">Casa</option>
-                  <option value="apartamento">Apartamento</option>
-                  <option value="chalet">Chalet</option>
-                  <option value="oficina">Oficina</option>
-                  <option value="local">Local comercial</option>
+                  <option value="casa">🏠 Casa</option>
+                  <option value="apartamento">🏢 Apartamento</option>
+                  <option value="chalet">🏡 Chalet</option>
+                  <option value="oficina">🏢 Oficina</option>
+                  <option value="local">🏪 Local comercial</option>
                 </select>
               </div>
               <div>
                 <Button 
-                  className="w-full h-12 bg-gradient-to-r from-primary to-gray-800 hover:from-gray-800 hover:to-primary transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none" 
+                  className="w-full h-14 bg-gradient-to-r from-primary/90 via-primary to-primary/90 hover:from-primary hover:to-gray-800 transition-all duration-500 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none rounded-2xl text-base font-medium shadow-lg hover:shadow-xl backdrop-blur-sm border-0" 
                   onClick={handleSearch}
                   disabled={isSearching}
                 >
@@ -131,11 +154,12 @@ export function Hero({ onSearch, onNavigateToProperties }: HeroProps) {
                   ) : (
                     <>
                       <Search className="h-5 w-5 mr-2" />
-                      Buscar
+                      Buscar Propiedades
                     </>
                   )}
                 </Button>
               </div>
+            </div>
             </div>
           </div>
 
